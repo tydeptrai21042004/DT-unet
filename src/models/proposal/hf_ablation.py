@@ -112,8 +112,11 @@ class HFAblationUNet(nn.Module):
       - wo_hartley: same HF block but the Hartley signal transform is replaced by identity.
       - wo_fourier_kernel: HF signal transform is kept but frequency-domain mixer is disabled.
       - wo_residual: HF block output does not add the input identity path.
-      - encoder_stage4: HF is applied to encoder feature index -2 instead of deepest bottleneck.
-      - decoder_stage: HF is applied after the decoder and before the segmentation head.
+      - encoder_stage4: legacy pre-bottleneck placement control.
+      - decoder_stage: legacy post-decoder placement control.
+      - hf_at_encoder0..hf_at_encoder3: place the same HF block after each encoder stage.
+      - hf_at_bottleneck: place HF at the deepest encoder bottleneck.
+      - hf_at_decoder3..hf_at_decoder0: place HF after each decoder block.
     """
 
     def __init__(
@@ -130,6 +133,21 @@ class HFAblationUNet(nn.Module):
             "wo_residual",
             "encoder_stage4",
             "decoder_stage",
+            "hf_at_encoder0",
+            "hf_at_encoder1",
+            "hf_at_encoder2",
+            "hf_at_encoder3",
+            "hf_at_bottleneck",
+            "hf_at_decoder3",
+            "hf_at_decoder2",
+            "hf_at_decoder1",
+            "hf_at_decoder0",
+            "no_gate",
+            "with_se",
+            "identity_projection",
+            "conv_projection",
+            "low_rank_mixer",
+            "high_rank_mixer",
         ] = "full_hf",
         hf_alpha: float = 0.5,
         hf_alpha_start: float = 0.0,
@@ -147,6 +165,9 @@ class HFAblationUNet(nn.Module):
         gate_init_bias: float = -2.0,
         decoder_use_cbam: bool = False,
         identity_init: bool = True,
+        hf_projection: str = "linear",
+        hf_mixer_rank: Optional[int] = None,
+        hf_mixer_init_hw: Sequence[int] = (22, 22),
     ) -> None:
         super().__init__()
         self.ablation = ablation
@@ -160,15 +181,11 @@ class HFAblationUNet(nn.Module):
         block_norm = hf_block_norm or norm
         block_act = hf_block_act or act
 
-        if ablation == "encoder_stage4":
-            target_channels = channels[-2]
-            self.placement = "encoder_stage4"
-        elif ablation == "decoder_stage":
-            target_channels = channels[0]
-            self.placement = "decoder_stage"
-        else:
-            target_channels = channels[-1]
-            self.placement = "bottleneck"
+        self.placement = self._resolve_placement(ablation=ablation, channels=channels)
+        self.placement_kind = str(self.placement["kind"])
+        self.placement_label = str(self.placement["label"])
+        self.placement_stage = int(self.placement["stage"])
+        target_channels = int(self.placement["channels"])
 
         self.block = self._make_block(
             ablation=ablation,
@@ -184,12 +201,69 @@ class HFAblationUNet(nn.Module):
             use_gate=use_gate,
             gate_init_bias=gate_init_bias,
             identity_init=identity_init,
+            hf_projection=hf_projection,
+            hf_mixer_rank=hf_mixer_rank,
+            hf_mixer_init_hw=hf_mixer_init_hw,
         )
         self.regularizer = HFRegularizer() if use_hf_regularizer and isinstance(self.block, HFBottleneck) else None
         init_weights(self)
         # Re-apply identity-friendly initialization because init_weights initializes all modules.
         self._refresh_identity_friendly_init(gate_init_bias=gate_init_bias, identity_init=identity_init)
         self.set_epoch(0)
+
+    @staticmethod
+    def _resolve_placement(*, ablation: str, channels: Sequence[int]) -> dict:
+        """Return the insertion location for the HF block.
+
+        Naming convention for new placement ablations:
+        - encoder0/1/2/3 are the skip features from high to low resolution.
+        - bottleneck is the deepest encoder feature.
+        - decoder3/2/1/0 are decoder outputs from low to high resolution.
+
+        The older names `encoder_stage4` and `decoder_stage` are kept for
+        backward compatibility with previous tests and configs.
+        """
+        channels = tuple(int(c) for c in channels)
+
+        encoder_placements = {
+            "hf_at_encoder0": 0,
+            "hf_at_encoder1": 1,
+            "hf_at_encoder2": 2,
+            "hf_at_encoder3": 3,
+            "hf_at_bottleneck": len(channels) - 1,
+        }
+        decoder_placements = {
+            "hf_at_decoder3": (0, 3),
+            "hf_at_decoder2": (1, 2),
+            "hf_at_decoder1": (2, 1),
+            "hf_at_decoder0": (3, 0),
+        }
+
+        if ablation in encoder_placements:
+            stage = encoder_placements[ablation]
+            return {
+                "kind": "encoder",
+                "label": f"encoder{stage}" if stage < len(channels) - 1 else "bottleneck",
+                "stage": stage,
+                "channels": channels[stage],
+            }
+        if ablation in decoder_placements:
+            block_index, channel_index = decoder_placements[ablation]
+            return {
+                "kind": "decoder",
+                "label": f"decoder{channel_index}",
+                "block_index": block_index,
+                "stage": channel_index,
+                "channels": channels[channel_index],
+            }
+
+        # Backward-compatible controls from the previous ablation package.
+        if ablation == "encoder_stage4":
+            return {"kind": "encoder", "label": "pre_bottleneck", "stage": len(channels) - 2, "channels": channels[-2]}
+        if ablation == "decoder_stage":
+            return {"kind": "post_decoder", "label": "post_decoder", "stage": 0, "channels": channels[0]}
+
+        return {"kind": "encoder", "label": "bottleneck", "stage": len(channels) - 1, "channels": channels[-1]}
 
     def _make_block(
         self,
@@ -207,6 +281,9 @@ class HFAblationUNet(nn.Module):
         use_gate: bool,
         gate_init_bias: float,
         identity_init: bool,
+        hf_projection: str,
+        hf_mixer_rank: Optional[int],
+        hf_mixer_init_hw: Sequence[int],
     ) -> nn.Module:
         if ablation == "conv_bottleneck":
             return ConvBottleneck(channels, norm=norm, act=act, residual=True)
@@ -221,6 +298,22 @@ class HFAblationUNet(nn.Module):
                 identity_init=identity_init,
             )
 
+        # Architecture-only controls. These are implemented as true model
+        # changes, while training-level options such as warmup/regularization
+        # are controlled only by the YAML config.
+        if ablation == "no_gate":
+            use_gate = False
+        elif ablation == "with_se":
+            use_se = True
+        elif ablation == "identity_projection":
+            hf_projection = "identity"
+        elif ablation == "conv_projection":
+            hf_projection = "conv"
+        elif ablation == "low_rank_mixer":
+            hf_expansion = 1.0
+        elif ablation == "high_rank_mixer":
+            hf_expansion = 2.0
+
         residual = ablation != "wo_residual"
         block = HFBottleneck(
             channels,
@@ -234,6 +327,9 @@ class HFAblationUNet(nn.Module):
             mixer_act=mixer_act,
             gate_init_bias=gate_init_bias,
             identity_init=identity_init,
+            projection=hf_projection,
+            mixer_rank=hf_mixer_rank,
+            mixer_init_hw=hf_mixer_init_hw,
         )
         if ablation == "wo_hartley":
             block.hartley = IdentityTransform2d()
@@ -306,18 +402,26 @@ class HFAblationUNet(nn.Module):
             self.block.set_alpha(alpha)  # type: ignore[attr-defined]
 
     def _apply_block_to_features(self, feats: list[torch.Tensor]) -> list[torch.Tensor]:
-        if self.placement == "bottleneck":
-            feats[-1] = self.block(feats[-1])
-        elif self.placement == "encoder_stage4":
-            feats[-2] = self.block(feats[-2])
+        if self.placement["kind"] == "encoder":
+            stage = int(self.placement["stage"])
+            feats[stage] = self.block(feats[stage])
         return feats
+
+    def _decode_with_optional_hf(self, feats: list[torch.Tensor]) -> torch.Tensor:
+        x = feats[-1]
+        skips = list(reversed(feats[:-1]))
+        for block_index, (decoder_block, skip) in enumerate(zip(self.decoder.blocks, skips)):
+            x = decoder_block(x, skip)
+            if self.placement["kind"] == "decoder" and block_index == int(self.placement["block_index"]):
+                x = self.block(x)
+        if self.placement["kind"] == "post_decoder":
+            x = self.block(x)
+        return x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         feats = self.encoder(x)
         feats = self._apply_block_to_features(feats)
-        dec = self.decoder(feats)
-        if self.placement == "decoder_stage":
-            dec = self.block(dec)
+        dec = self._decode_with_optional_hf(feats)
         return self.seg_head(dec)
 
     def auxiliary_regularization(self) -> torch.Tensor:
@@ -378,6 +482,117 @@ class HFUNetDecoderStage(HFAblationUNet):
         super().__init__(ablation="decoder_stage", **kwargs)
 
 
+@register_model("hf_unet_no_gate")
+class HFUNetNoGate(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        kwargs["use_gate"] = False
+        super().__init__(ablation="no_gate", **kwargs)
+
+
+@register_model("hf_unet_with_se")
+class HFUNetWithSE(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        kwargs["use_se"] = True
+        super().__init__(ablation="with_se", **kwargs)
+
+
+@register_model("hf_unet_identity_projection")
+class HFUNetIdentityProjection(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        kwargs["hf_projection"] = "identity"
+        super().__init__(ablation="identity_projection", **kwargs)
+
+
+@register_model("hf_unet_conv_projection")
+class HFUNetConvProjection(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        kwargs["hf_projection"] = "conv"
+        super().__init__(ablation="conv_projection", **kwargs)
+
+
+@register_model("hf_unet_low_rank_mixer")
+class HFUNetLowRankMixer(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        kwargs["hf_expansion"] = 1.0
+        super().__init__(ablation="low_rank_mixer", **kwargs)
+
+
+@register_model("hf_unet_high_rank_mixer")
+class HFUNetHighRankMixer(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        kwargs["hf_expansion"] = 2.0
+        super().__init__(ablation="high_rank_mixer", **kwargs)
+
+
+
+@register_model("hf_unet_hf_at_encoder0")
+class HFUNetHFAtEncoder0(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        super().__init__(ablation="hf_at_encoder0", **kwargs)
+
+
+@register_model("hf_unet_hf_at_encoder1")
+class HFUNetHFAtEncoder1(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        super().__init__(ablation="hf_at_encoder1", **kwargs)
+
+
+@register_model("hf_unet_hf_at_encoder2")
+class HFUNetHFAtEncoder2(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        super().__init__(ablation="hf_at_encoder2", **kwargs)
+
+
+@register_model("hf_unet_hf_at_encoder3")
+class HFUNetHFAtEncoder3(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        super().__init__(ablation="hf_at_encoder3", **kwargs)
+
+
+@register_model("hf_unet_hf_at_bottleneck")
+class HFUNetHFAtBottleneck(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        super().__init__(ablation="hf_at_bottleneck", **kwargs)
+
+
+@register_model("hf_unet_hf_at_decoder3")
+class HFUNetHFAtDecoder3(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        super().__init__(ablation="hf_at_decoder3", **kwargs)
+
+
+@register_model("hf_unet_hf_at_decoder2")
+class HFUNetHFAtDecoder2(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        super().__init__(ablation="hf_at_decoder2", **kwargs)
+
+
+@register_model("hf_unet_hf_at_decoder1")
+class HFUNetHFAtDecoder1(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        super().__init__(ablation="hf_at_decoder1", **kwargs)
+
+
+@register_model("hf_unet_hf_at_decoder0")
+class HFUNetHFAtDecoder0(HFAblationUNet):
+    def __init__(self, **kwargs) -> None:
+        kwargs.pop("ablation", None)
+        super().__init__(ablation="hf_at_decoder0", **kwargs)
+
 __all__ = [
     "IdentityTransform2d",
     "ConvBottleneck",
@@ -390,4 +605,19 @@ __all__ = [
     "HFUNetWithoutResidual",
     "HFUNetEncoderStage4",
     "HFUNetDecoderStage",
+    "HFUNetNoGate",
+    "HFUNetWithSE",
+    "HFUNetIdentityProjection",
+    "HFUNetConvProjection",
+    "HFUNetLowRankMixer",
+    "HFUNetHighRankMixer",
+    "HFUNetHFAtEncoder0",
+    "HFUNetHFAtEncoder1",
+    "HFUNetHFAtEncoder2",
+    "HFUNetHFAtEncoder3",
+    "HFUNetHFAtBottleneck",
+    "HFUNetHFAtDecoder3",
+    "HFUNetHFAtDecoder2",
+    "HFUNetHFAtDecoder1",
+    "HFUNetHFAtDecoder0",
 ]
