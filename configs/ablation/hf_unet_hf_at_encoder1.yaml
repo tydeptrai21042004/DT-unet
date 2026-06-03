@@ -1,6 +1,6 @@
 experiment:
   output_root: outputs_ablation
-  name: hf_unet_decoder_stage
+  name: hf_unet_hf_at_encoder1
 data:
   root: data
   image_size: 352
@@ -32,7 +32,7 @@ eval:
   device: null
   include_aux_loss: false
 model:
-  name: hf_unet_decoder_stage
+  name: hf_unet_hf_at_encoder1
   in_channels: 3
   num_classes: 1
   channels:
@@ -62,3 +62,5 @@ model:
   hf_mixer_init_hw:
   - 22
   - 22
+notes:
+  purpose: 'HF placement ablation: HF after encoder stage 1'

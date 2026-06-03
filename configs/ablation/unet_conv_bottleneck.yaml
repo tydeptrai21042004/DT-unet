@@ -1,7 +1,6 @@
 experiment:
   output_root: outputs_ablation
   name: unet_conv_bottleneck
-
 data:
   root: data
   image_size: 352
@@ -9,7 +8,6 @@ data:
   num_workers: 4
   pin_memory: true
   augmentation: baseline
-
 train:
   epochs: 30
   lr: 0.001
@@ -24,30 +22,33 @@ train:
   loss: bce_dice
   threshold: 0.5
   aux_loss_weight: 0.0
-  aux_warmup_epochs: 10
-  aux_ramp_epochs: 20
+  aux_warmup_epochs: 0
+  aux_ramp_epochs: 0
   save_metric: dice
   save_metric_mode: max
-
 eval:
   loss: bce_dice
   threshold: 0.5
   device: null
   include_aux_loss: false
-
 model:
   name: unet_conv_bottleneck
   in_channels: 3
   num_classes: 1
-  channels: [32, 64, 128, 256, 512]
+  channels:
+  - 32
+  - 64
+  - 128
+  - 256
+  - 512
+  norm: bn
+  act: relu
   hf_alpha: 0.5
-  hf_alpha_start: 0.0
-  hf_alpha_warmup_epochs: 10
+  hf_alpha_start: 0.5
+  hf_alpha_warmup_epochs: 0
   hf_expansion: 1.5
   hf_dropout: 0.0
   use_hf_regularizer: false
-  norm: bn
-  act: relu
   hf_block_norm: gn
   hf_block_act: gelu
   mixer_act: identity
@@ -56,3 +57,8 @@ model:
   gate_init_bias: -2.0
   decoder_use_cbam: false
   identity_init: true
+  hf_projection: linear
+  hf_mixer_rank: null
+  hf_mixer_init_hw:
+  - 22
+  - 22

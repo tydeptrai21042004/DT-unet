@@ -28,6 +28,8 @@ Usage:
   bash run.sh eval-all [SPLIT]
   bash run.sh benchmark
   bash run.sh benchmark-seeds
+  bash run.sh ablation
+  bash run.sh placement-ablation
   bash run.sh aggregate-seeds
   bash run.sh export
 
@@ -154,6 +156,31 @@ cmd_benchmark_seeds() {
     "$@"
 }
 
+cmd_ablation() {
+  local first_seed="${SEEDS%%,*}"
+  "$PYTHON_BIN" scripts/run_compact_hf_ablation.py \
+    --dataset "$DATASET" \
+    --data-root "$DATA_ROOT" \
+    --image-size "$IMAGE_SIZE" \
+    --seed "$first_seed" \
+    --device "$DEVICE" \
+    --output-root "$OUTPUT_ROOT" \
+    "$@"
+}
+
+
+cmd_placement_ablation() {
+  local first_seed="${SEEDS%%,*}"
+  "$PYTHON_BIN" scripts/run_hf_placement_ablation.py \
+    --dataset "$DATASET" \
+    --data-root "$DATA_ROOT" \
+    --image-size "$IMAGE_SIZE" \
+    --seed "$first_seed" \
+    --device "$DEVICE" \
+    --output-root "$OUTPUT_ROOT" \
+    "$@"
+}
+
 cmd_aggregate_seeds() {
   "$PYTHON_BIN" scripts/aggregate_seed_results.py \
     --output-root "$OUTPUT_ROOT" \
@@ -179,6 +206,8 @@ main() {
     eval-all) cmd_eval_all "$@" ;;
     benchmark) cmd_benchmark "$@" ;;
     benchmark-seeds) cmd_benchmark_seeds "$@" ;;
+    ablation) cmd_ablation "$@" ;;
+    placement-ablation) cmd_placement_ablation "$@" ;;
     aggregate-seeds) cmd_aggregate_seeds "$@" ;;
     export) cmd_export "$@" ;;
     -h|--help|help|"") usage ;;

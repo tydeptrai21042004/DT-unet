@@ -1,6 +1,6 @@
 experiment:
   output_root: outputs_ablation
-  name: hf_unet_decoder_stage
+  name: hf_unet_no_gate
 data:
   root: data
   image_size: 352
@@ -32,7 +32,7 @@ eval:
   device: null
   include_aux_loss: false
 model:
-  name: hf_unet_decoder_stage
+  name: hf_unet_no_gate
   in_channels: 3
   num_classes: 1
   channels:
@@ -53,7 +53,7 @@ model:
   hf_block_act: gelu
   mixer_act: identity
   use_se: false
-  use_gate: true
+  use_gate: false
   gate_init_bias: -2.0
   decoder_use_cbam: false
   identity_init: true
