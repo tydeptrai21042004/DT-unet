@@ -1,5 +1,7 @@
 from .hf_bottleneck import HFBottleneck
 from .hf_regularizer import HFRegularizer
+from .hc_bottleneck import HCBottleneck, WeightedHHartleyCosineAxialConv
+from .hc_unet import HFUNetNoGateProposal, HCUNetNoGateProposal
 from .hf_unet import HFUNet
 from .hf_ablation import (
     HFAblationUNet,
@@ -31,6 +33,10 @@ __all__ = [
     "HFBottleneck",
     "HFRegularizer",
     "HFUNet",
+    "HCBottleneck",
+    "WeightedHHartleyCosineAxialConv",
+    "HFUNetNoGateProposal",
+    "HCUNetNoGateProposal",
     "HFAblationUNet",
     "UNetConvBottleneck",
     "UNetFFTGFNetBottleneck",

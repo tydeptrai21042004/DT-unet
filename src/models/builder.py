@@ -19,6 +19,11 @@ ALIASES = {
     "proposal": "proposal_hf_unet",
     "hf_unet_lite": "proposal_hf_unet_lite",
     "proposal_lite": "proposal_hf_unet_lite",
+    "proposal_no_gate": "proposal_hf_unet_no_gate",
+    "hf_unet_no_gate_proposal": "proposal_hf_unet_no_gate",
+    "proposal_hc": "proposal_hc_unet_no_gate",
+    "proposal_hc_no_gate": "proposal_hc_unet_no_gate",
+    "proposal_hartley_cosine": "proposal_hc_unet_no_gate",
 }
 
 
