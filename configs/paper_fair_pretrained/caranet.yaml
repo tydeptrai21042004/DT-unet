@@ -10,8 +10,8 @@ eval:
   loss: bce_dice
   threshold: 0.5
 experiment:
-  output_root: outputs_paper_fair
-  name: caranet
+  output_root: outputs_paper_fair_pretrained
+  name: caranet_pretrained
 train:
   aux_loss_weight: 0.0
   aux_ramp_epochs: 0
@@ -53,6 +53,9 @@ model:
   norm: bn
   act: relu
   backbone_impl: official
-  backbone_pretrained: false
+  backbone_pretrained: true
   res2net_variant: res2net50_v1b_26w_4s
   faithful_output: true
+notes:
+  pretrained_backbone: Uses automatic public ImageNet backbone checkpoint download
+    when available.

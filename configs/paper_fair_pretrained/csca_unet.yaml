@@ -1,6 +1,6 @@
 data:
   augmentation: strong
-  batch_size: 6
+  batch_size: 2
   image_size: 352
   num_workers: 4
   pin_memory: true
@@ -9,9 +9,11 @@ eval:
   device: null
   loss: bce_dice
   threshold: 0.5
+  debug_logits: false
+  debug_logits_interval: 1
 experiment:
-  output_root: outputs_paper_fair
-  name: caranet
+  output_root: outputs_paper_fair_pretrained
+  name: csca_unet_pretrained
 train:
   aux_loss_weight: 0.0
   aux_ramp_epochs: 0
@@ -31,17 +33,21 @@ train:
   seed: 42
   t_max: 30
   threshold: 0.5
+  debug_logits: false
+  debug_logits_interval: 1
   weight_decay: 0.0001
   aux_loss: bce_dice
   aux_output_weights:
   - 1.0
   - 1.0
   - 1.0
+  - 1.0
+  - 1.0
   use_aux_outputs_loss: true
   use_boundary_loss: true
-  gradient_accumulation_steps: 1
+  gradient_accumulation_steps: 3
 model:
-  name: caranet
+  name: csca_unet
   in_channels: 3
   num_classes: 1
   channels:
@@ -50,9 +56,14 @@ model:
   - 128
   - 256
   - 512
-  norm: bn
-  act: relu
-  backbone_impl: official
-  backbone_pretrained: false
-  res2net_variant: res2net50_v1b_26w_4s
+  - 1024
+  decay: 2
+  deep_supervision: true
   faithful_output: true
+  attention_mode: paper
+  logit_clip: null
+notes:
+  effective_batch_size: physical batch_size=2 with gradient_accumulation_steps=3 gives
+    effective batch size 6.
+  pretrained_backbone: No official external backbone in this adapter; trained from
+    random initialization.

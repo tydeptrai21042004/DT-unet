@@ -32,6 +32,9 @@ train:
   t_max: 30
   threshold: 0.5
   weight_decay: 0.0001
+  use_aux_outputs_loss: true
+  use_boundary_loss: true
+  gradient_accumulation_steps: 1
 model:
   name: proposal_hf_unet
   in_channels: 3

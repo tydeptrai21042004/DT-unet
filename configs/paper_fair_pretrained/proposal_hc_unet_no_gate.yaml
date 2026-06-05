@@ -10,8 +10,8 @@ eval:
   loss: bce_dice
   threshold: 0.5
 experiment:
-  output_root: outputs_paper_fair
-  name: caranet
+  output_root: outputs_paper_fair_pretrained
+  name: proposal_hc_unet_no_gate_pretrained
 train:
   aux_loss_weight: 0.0
   aux_ramp_epochs: 0
@@ -32,16 +32,11 @@ train:
   t_max: 30
   threshold: 0.5
   weight_decay: 0.0001
-  aux_loss: bce_dice
-  aux_output_weights:
-  - 1.0
-  - 1.0
-  - 1.0
   use_aux_outputs_loss: true
   use_boundary_loss: true
   gradient_accumulation_steps: 1
 model:
-  name: caranet
+  name: proposal_hc_unet_no_gate
   in_channels: 3
   num_classes: 1
   channels:
@@ -50,9 +45,31 @@ model:
   - 128
   - 256
   - 512
+  hf_alpha: 0.5
+  hf_alpha_start: 0.5
+  hf_alpha_warmup_epochs: 0
+  hf_expansion: 1.5
+  hf_dropout: 0.1
+  use_hf_regularizer: false
   norm: bn
   act: relu
-  backbone_impl: official
-  backbone_pretrained: false
-  res2net_variant: res2net50_v1b_26w_4s
-  faithful_output: true
+  hf_block_norm: gn
+  hf_block_act: gelu
+  mixer_act: gelu
+  hf_projection: linear
+  hf_mixer_init_hw:
+  - 22
+  - 22
+  hf_mixer_rank: null
+  use_se: false
+  use_gate: false
+  gate_init_bias: -2.0
+  decoder_use_cbam: false
+  identity_init: true
+  hc_kernel_size: 3
+  hc_h: 1.0
+  hc_learnable_h: false
+  hc_shared_kernel: false
+notes:
+  pretrained_backbone: No official external backbone in this adapter; trained from
+    random initialization.

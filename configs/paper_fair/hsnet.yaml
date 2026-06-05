@@ -38,6 +38,9 @@ train:
   - 0.6
   - 0.8
   - 1.0
+  use_aux_outputs_loss: true
+  use_boundary_loss: true
+  gradient_accumulation_steps: 1
 model:
   name: hsnet
   in_channels: 3

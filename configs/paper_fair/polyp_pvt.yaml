@@ -35,6 +35,9 @@ train:
   aux_loss: bce_dice
   aux_output_weights:
   - 1.0
+  use_aux_outputs_loss: true
+  use_boundary_loss: true
+  gradient_accumulation_steps: 1
 model:
   name: polyp_pvt
   in_channels: 3
