@@ -11,7 +11,7 @@ eval:
   threshold: 0.5
 experiment:
   output_root: outputs_paper_fair
-  name: unetpp
+  name: unet
 train:
   aux_loss_weight: 0.0
   aux_ramp_epochs: 0
@@ -32,13 +32,8 @@ train:
   t_max: 30
   threshold: 0.5
   weight_decay: 0.0001
-  aux_loss: bce_dice
-  aux_output_weights:
-  - 0.4
-  - 0.7
-  - 1.0
 model:
-  name: unetpp
+  name: unet
   in_channels: 3
   num_classes: 1
   channels:
@@ -47,7 +42,5 @@ model:
   - 128
   - 256
   - 512
-  deep_supervision: true
   norm: bn
   act: relu
-  faithful_output: true
