@@ -47,5 +47,5 @@ model:
   act: gelu
   backbone_impl: official
   backbone_pretrained: false
-  pvt_variant: pvt_v2_b0_fast
+  pvt_variant: pvt_v2_b2
   image_size: 352
