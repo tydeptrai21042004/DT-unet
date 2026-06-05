@@ -164,6 +164,8 @@ def main() -> None:
         boundary_loss_fn=boundary_loss_fn,
         boundary_weight=float(cfg.get("train", {}).get("boundary_weight", 0.0)),
         include_aux_loss=bool(cfg.get("eval", {}).get("include_aux_loss", False)),
+        use_aux_outputs_loss=bool(cfg.get("train", {}).get("use_aux_outputs_loss", True)),
+        use_boundary_loss=bool(cfg.get("train", {}).get("use_boundary_loss", True)),
     )
     metrics = evaluator.evaluate(model.to(resolved_device), dataloader)
     payload = {

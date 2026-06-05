@@ -13,9 +13,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.datasets import infer_dataset_paths, normalize_dataset_name
+from src.datasets import canonical_sample_id, infer_dataset_paths, normalize_dataset_name
 
-VALID_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+VALID_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif"}
 
 
 def _is_image(path: Path) -> bool:
@@ -28,7 +28,8 @@ def _resolve_image_dir(data_root: Path, dataset_name: str, image_size: Optional[
 
 
 def _collect_ids(image_dir: Path) -> List[str]:
-    return sorted(p.stem for p in image_dir.iterdir() if p.is_file() and _is_image(p))
+    ids = {canonical_sample_id(p.stem) for p in image_dir.rglob("*") if p.is_file() and _is_image(p)}
+    return sorted(ids)
 
 
 def _split_ids(ids: Sequence[str], train_ratio: float, val_ratio: float, seed: int) -> Tuple[List[str], List[str], List[str]]:
@@ -62,7 +63,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--val-ratio", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output-dir", type=str, default=None, help="Defaults to <data-root>/splits")
+    parser.add_argument("--output-dir", type=str, default=None, help="Defaults to <data-root>/splits/<dataset> so multiple datasets can coexist.")
     return parser.parse_args()
 
 
@@ -79,7 +80,7 @@ def main() -> None:
         raise RuntimeError(f"Need at least 3 samples to create train/val/test splits, found {len(ids)}")
 
     train_ids, val_ids, test_ids = _split_ids(ids, args.train_ratio, args.val_ratio, args.seed)
-    output_dir = Path(args.output_dir) if args.output_dir else data_root / "splits"
+    output_dir = Path(args.output_dir) if args.output_dir else data_root / "splits" / dataset_name
     _write_list(train_ids, output_dir / "train.txt")
     _write_list(val_ids, output_dir / "val.txt")
     _write_list(test_ids, output_dir / "test.txt")
