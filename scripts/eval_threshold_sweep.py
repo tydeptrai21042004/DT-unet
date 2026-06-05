@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.datasets import build_eval_transforms, KvasirSegDataset, normalize_dataset_name
+from src.datasets import build_dataset, build_eval_transforms, normalize_dataset_name
 from src.engine import Evaluator
 from src.losses import BCEDiceLoss, DiceLoss, StructureLoss
 from src.models import build_model
@@ -107,9 +107,8 @@ def build_loader(cfg: Dict[str, Any], split: str, device: str) -> DataLoader:
     data_cfg = cfg["data"]
     image_size = int(data_cfg.get("image_size", 352))
     dataset_name = normalize_dataset_name(data_cfg.get("dataset", "kvasir_seg"))
-    if dataset_name not in {"kvasir_seg", "custom"}:
-        raise ValueError(f"Unsupported dataset for threshold sweep: {dataset_name}")
-    dataset = KvasirSegDataset(
+    dataset = build_dataset(
+        name=dataset_name,
         root=data_cfg.get("root", "data"),
         split=split,
         image_size=image_size,

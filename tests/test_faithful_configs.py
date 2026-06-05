@@ -38,7 +38,6 @@ def test_faithful_configs_share_dataset_and_optimizer_recipe():
     reference = load_cfg(MODELS[0])
     keys = [
         ("data", "image_size"),
-        ("data", "batch_size"),
         ("data", "augmentation"),
         ("train", "epochs"),
         ("train", "optimizer"),

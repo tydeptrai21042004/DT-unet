@@ -13,8 +13,8 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.engine.output_utils import compute_supervised_loss
 from src.losses import BCEDiceLoss
 from src.models import build_model
-from src.models.baselines.attention_unet import AttentionUNetDecoderBlock
-from src.models.baselines.resunetpp import ResUNetPPAttentionGate, ResUNetPlusPlus
+from src.models.baselines.attention_unet import AttentionGate, AttentionUNetDecoderBlock
+from src.models.baselines.resunetpp import ResUNetPlusPlus
 
 
 def _cfg(name: str, directory: str = "configs/paper_fair") -> dict:
@@ -57,14 +57,14 @@ def test_attention_unet_uses_four_attention_gated_decoder_skips():
         },
     ).eval()
     blocks = [m for m in model.modules() if isinstance(m, AttentionUNetDecoderBlock)]
-    gates = [m for m in model.modules() if isinstance(m, ResUNetPPAttentionGate)]
+    gates = [m for m in model.modules() if isinstance(m, AttentionGate)]
     assert len(blocks) == 4
     assert len(gates) == 4
 
 
 def test_attention_gate_is_conditioned_by_decoder_gate_signal():
     torch.manual_seed(11)
-    gate = ResUNetPPAttentionGate(skip_channels=4, gate_channels=8, inter_channels=2).eval()
+    gate = AttentionGate(skip_channels=4, gate_channels=8, inter_channels=2).eval()
     skip = torch.randn(1, 4, 16, 16)
     gate_low = torch.zeros(1, 8, 8, 8)
     gate_high = torch.ones(1, 8, 8, 8) * 3.0

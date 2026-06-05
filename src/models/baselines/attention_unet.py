@@ -9,16 +9,47 @@ from ..common.blocks import DoubleConv
 from ..common.encoder import PyramidEncoder
 from ..common.utils import ensure_tuple_channels, init_weights, resize_to
 from ..registry import register_model
-from .resunetpp import ResUNetPPAttentionGate
+
+
+class AttentionGate(nn.Module):
+    """Additive attention gate used by Attention U-Net.
+
+    This gate follows the paper-level Attention U-Net mechanism: project the
+    skip tensor and decoder gating tensor to an intermediate space, add them,
+    pass the result through ReLU + sigmoid, and use the resulting spatial gate
+    to filter the skip connection before concatenation.
+    """
+
+    def __init__(
+        self,
+        skip_channels: int,
+        gate_channels: int,
+        inter_channels: int | None = None,
+    ) -> None:
+        super().__init__()
+        inter_channels = max(int(inter_channels or skip_channels // 2), 1)
+        self.W_x = nn.Sequential(
+            nn.Conv2d(skip_channels, inter_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(inter_channels),
+        )
+        self.W_g = nn.Sequential(
+            nn.Conv2d(gate_channels, inter_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(inter_channels),
+        )
+        self.psi = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.Conv2d(inter_channels, 1, kernel_size=1, bias=True),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, skip: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+        gate = resize_to(gate, skip)
+        attn = self.psi(self.W_x(skip) + self.W_g(gate))
+        return skip * attn
 
 
 class AttentionUNetDecoderBlock(nn.Module):
-    """Attention U-Net decoder block with an attention-gated skip connection.
-
-    The high-level decoder feature acts as the gating signal. The skip tensor is
-    filtered before concatenation, matching the core idea of Attention U-Net
-    while keeping the same unified benchmark input/output contract as U-Net.
-    """
+    """Attention U-Net decoder block with an additive attention-gated skip."""
 
     def __init__(
         self,
@@ -29,12 +60,10 @@ class AttentionUNetDecoderBlock(nn.Module):
         act: str = "relu",
     ) -> None:
         super().__init__()
-        self.attention = ResUNetPPAttentionGate(
+        self.attention = AttentionGate(
             skip_channels=skip_channels,
             gate_channels=in_channels,
             inter_channels=max(skip_channels // 2, 1),
-            norm=norm,
-            act=act,
         )
         self.conv = DoubleConv(in_channels + skip_channels, out_channels, norm=norm, act=act)
 
@@ -86,4 +115,4 @@ class AttentionUNet(nn.Module):
         return self.seg_head(d0)
 
 
-__all__ = ["AttentionUNet", "AttentionUNetDecoderBlock"]
+__all__ = ["AttentionUNet", "AttentionUNetDecoderBlock", "AttentionGate"]

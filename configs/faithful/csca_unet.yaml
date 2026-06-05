@@ -1,6 +1,6 @@
 data:
   augmentation: strong
-  batch_size: 6
+  batch_size: 2
   image_size: 352
   num_workers: 4
   pin_memory: true
@@ -57,5 +57,5 @@ model:
   decay: 2
   deep_supervision: true
   faithful_output: true
-  attention_mode: efficient
-  logit_clip: 20.0
+  attention_mode: paper
+  logit_clip: null

@@ -5,7 +5,7 @@ Supported input modes:
 1) Existing extracted dataset folder with images/ and masks/
 2) Zip archive containing a supported dataset
 3) Optional direct download URL (including Google Drive links via gdown if installed)
-4) Automatic default download when a stable URL is known (currently Kvasir-SEG)
+4) Automatic default download when a default URL is configured in the dataset registry
 
 Outputs a benchmark-friendly layout:
     data/
@@ -34,13 +34,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.datasets import get_dataset_spec, normalize_dataset_name
-from src.datasets.kvasir_seg_dataset import _dir_name_variants
+from src.datasets.kvasir_seg_dataset import _dir_name_variants, _resolve_image_mask_dirs
 
 VALID_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 
 
 def _has_image_mask_dirs(path: Path) -> bool:
-    return (path / "images").is_dir() and (path / "masks").is_dir()
+    return _resolve_image_mask_dirs(path) is not None
 
 
 
@@ -191,7 +191,7 @@ def prepared_dataset_exists(data_root: Path, image_size: int) -> bool:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare a supported polyp segmentation dataset for benchmark training.")
-    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Kvasir-SEG has a stable default URL; the others can use source-dir, zip-path, or a custom download URL.")
+    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. All built-in public polyp datasets have default download URLs; custom datasets must use an existing local image/mask layout.")
     parser.add_argument("--data-root", type=str, default="data", help="Benchmark data root.")
     parser.add_argument("--source-dir", type=str, default=None, help="Path to an extracted dataset folder or its parent.")
     parser.add_argument("--zip-path", type=str, default=None, help="Path to a dataset zip archive.")
@@ -252,8 +252,11 @@ def main() -> None:
                 "Use --source-dir, --zip-path, or --download-url."
             )
 
-    image_dir = dataset_root / "images"
-    mask_dir = dataset_root / "masks"
+    resolved_dirs = _resolve_image_mask_dirs(dataset_root)
+    if resolved_dirs is None:
+        raise FileNotFoundError(f"Could not resolve compatible image/mask folders inside dataset root: {dataset_root}")
+    image_dir = resolved_dirs.image_dir
+    mask_dir = resolved_dirs.mask_dir
     pairs = _collect_pairs(image_dir, mask_dir)
 
     if not args.skip_raw_copy:

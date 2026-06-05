@@ -21,7 +21,6 @@ def load_cfg(name: str):
 def test_paper_fair_configs_share_same_training_recipe():
     keys = [
         ("data", "image_size"),
-        ("data", "batch_size"),
         ("data", "augmentation"),
         ("train", "epochs"),
         ("train", "lr"),
@@ -47,6 +46,21 @@ def test_paper_fair_configs_share_same_training_recipe():
         for section, key in keys:
             assert cfg[section][key] == reference[section][key], (model_name, section, key, cfg[section][key], reference[section][key])
 
+
+
+def test_paper_fair_batch_sizes_are_positive_and_memory_only_exceptions_are_declared():
+    reference = load_cfg(MODELS[0])
+    reference_batch = int(reference["data"]["batch_size"])
+    allowed_smaller = {"csca_unet"}
+    for model_name in MODELS:
+        cfg = load_cfg(model_name)
+        batch_size = int(cfg["data"]["batch_size"])
+        assert batch_size > 0, model_name
+        if model_name not in allowed_smaller:
+            assert batch_size == reference_batch, model_name
+        else:
+            assert batch_size <= reference_batch, model_name
+            assert cfg["model"].get("attention_mode") == "paper", model_name
 
 def test_paper_fair_proposal_disables_proposal_only_training_helpers():
     cfg = load_cfg("proposal_hf_unet")

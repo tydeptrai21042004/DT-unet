@@ -1,5 +1,5 @@
 from .acsnet import ACSNet, ACSNetLite
-from .attention_unet import AttentionUNet, AttentionUNetDecoderBlock
+from .attention_unet import AttentionUNet, AttentionUNetDecoderBlock, AttentionGate
 from .caranet import CaraNet, CaraNetLite
 from .cfanet import CFANet, CFANetLite
 from .csca_unet import CSCAUNet, CSCAUNetLite
@@ -16,6 +16,7 @@ __all__ = [
     "UNet",
     "AttentionUNet",
     "AttentionUNetDecoderBlock",
+    "AttentionGate",
     "UNetCBAM",
     "UNetPlusPlus",
     "ResUNetPlusPlus",

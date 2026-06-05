@@ -19,7 +19,7 @@ from src.models.baselines.csca_unet import (
     CSCASpatialAttention,
     DoubleSqueezeExcitation,
 )
-from src.models.baselines.attention_unet import AttentionUNetDecoderBlock
+from src.models.baselines.attention_unet import AttentionGate, AttentionUNetDecoderBlock
 from src.models.baselines.resunetpp import ResUNetPPAttentionGate, ResUNetPPDecoderBlock
 from src.models.common.blocks import ASPP, ResidualBlock, SqueezeExcitation
 from src.models.common.official_backbones import (
@@ -69,7 +69,7 @@ def _fast_test_cfg(model_name: str, cfg: dict):
 
 PAPER_MODULE_CONTRACTS: dict[str, tuple[type, ...]] = {
     # Attention U-Net: attention-gated decoder skip connections.
-    "attention_unet": (ResUNetPPAttentionGate, AttentionUNetDecoderBlock),
+    "attention_unet": (AttentionGate, AttentionUNetDecoderBlock),
     # PraNet: Res2Net backbone + RFB aggregation + parallel reverse attention.
     "pranet": (OfficialRes2NetEncoder, RFBModified, DenseAggregation, ReverseAttentionBranch),
     # ACSNet: local context attention + global context module + adaptive selection.

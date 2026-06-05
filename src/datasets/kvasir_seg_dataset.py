@@ -98,8 +98,73 @@ def _dir_name_variants(dataset_name: str) -> Tuple[str, ...]:
     return tuple(deduped)
 
 
+IMAGE_DIR_NAMES = {
+    "image",
+    "images",
+    "imgs",
+    "img",
+    "original",
+    "originals",
+    "frame",
+    "frames",
+    "jpegimages",
+    "bbdd",
+}
+MASK_DIR_NAMES = {
+    "mask",
+    "masks",
+    "gt",
+    "groundtruth",
+    "groundtruths",
+    "ground_truth",
+    "ground_truths",
+    "ground truth",
+    "ground truths",
+    "annotation",
+    "annotations",
+    "label",
+    "labels",
+    "segmentationclass",
+    "segmentationclasses",
+}
+
+
+def _canonical_dir_key(name: str) -> str:
+    return name.strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _resolve_image_mask_dirs(path: Path) -> Optional[KvasirPaths]:
+    """Return compatible image/mask directories under ``path``.
+
+    Public polyp archives are not perfectly consistent: Kvasir/PraNet-style
+    bundles usually use ``images`` and ``masks``, while CVC-ClinicDB may use
+    ``Original`` and ``Ground Truth``. This resolver accepts the common names
+    without changing the dataset loader contract.
+    """
+    if not path.is_dir():
+        return None
+
+    children = [child for child in path.iterdir() if child.is_dir()]
+    by_key = {_canonical_dir_key(child.name): child for child in children}
+
+    image_dir: Optional[Path] = None
+    mask_dir: Optional[Path] = None
+    for key in IMAGE_DIR_NAMES:
+        image_dir = by_key.get(_canonical_dir_key(key))
+        if image_dir is not None:
+            break
+    for key in MASK_DIR_NAMES:
+        mask_dir = by_key.get(_canonical_dir_key(key))
+        if mask_dir is not None:
+            break
+
+    if image_dir is not None and mask_dir is not None:
+        return KvasirPaths(image_dir=image_dir, mask_dir=mask_dir)
+    return None
+
+
 def _has_image_mask_dirs(path: Path) -> bool:
-    return (path / "images").is_dir() and (path / "masks").is_dir()
+    return _resolve_image_mask_dirs(path) is not None
 
 
 def _iter_dataset_root_candidates(root: Path, dataset_name: str) -> Iterable[Path]:
@@ -173,7 +238,10 @@ def infer_dataset_paths(root: str | Path, dataset_name: str = "kvasir_seg", imag
             f"Could not infer image/mask directories for dataset={normalized!r} from root={root}. Expected {expected}"
         )
 
-    return KvasirPaths(image_dir=dataset_root / "images", mask_dir=dataset_root / "masks")
+    resolved = _resolve_image_mask_dirs(dataset_root)
+    if resolved is None:  # defensive: _find_dataset_root only returns compatible roots
+        raise FileNotFoundError(f"Could not resolve image/mask directories inside {dataset_root}")
+    return resolved
 
 
 
