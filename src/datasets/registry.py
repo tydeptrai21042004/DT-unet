@@ -53,6 +53,28 @@ DATASET_SPECS = {
         default_download_url="https://drive.google.com/file/d/1Y2z7FD5p5y31vkZwQQomXFRB0HutHyao/view?usp=sharing",
         description="CVC-300 polyp segmentation dataset.",
     ),
+
+    "isic2018": DatasetSpec(
+        name="isic2018",
+        aliases=("isic2018", "isic-2018", "isic", "isic_task1", "isic2018_task1", "isic_2018_task_1"),
+        canonical_dir="ISIC2018",
+        default_download_url=None,
+        description="ISIC 2018 Task 1 binary skin-lesion boundary segmentation dataset. Use --source-dir/--zip-path/--download-url because official downloads may require challenge/Kaggle access.",
+    ),
+    "busi": DatasetSpec(
+        name="busi",
+        aliases=("busi", "dataset_busi", "dataset_busi_with_gt", "breast_ultrasound", "breast-ultrasound", "breast_ultrasound_images_dataset"),
+        canonical_dir="Dataset_BUSI_with_GT",
+        default_download_url=None,
+        description="BUSI breast ultrasound lesion segmentation dataset. The generic loader pairs *_mask files with the corresponding images.",
+    ),
+    "drive": DatasetSpec(
+        name="drive",
+        aliases=("drive", "drive_db", "drive-db", "digital_retinal_images_for_vessel_extraction", "retinal_drive"),
+        canonical_dir="DRIVE",
+        default_download_url=None,
+        description="DRIVE retinal vessel segmentation dataset. The generic loader pairs *_manual masks with corresponding fundus images.",
+    ),
     "custom": DatasetSpec(
         name="custom",
         aliases=("custom", "custom_binary_seg", "custom_segmentation"),

@@ -36,6 +36,9 @@ class Trainer:
         debug_logits: bool = False,
         debug_logits_interval: int = 1,
         include_aux_loss_in_eval: bool = False,
+        use_aux_outputs_loss: bool = True,
+        use_boundary_loss: bool = True,
+        gradient_accumulation_steps: int = 1,
     ) -> None:
         self.device = torch.device(device)
         self.model = model.to(self.device)
@@ -55,6 +58,9 @@ class Trainer:
         self.logger = logger
         self.debug_logits = bool(debug_logits)
         self.debug_logits_interval = max(int(debug_logits_interval), 1)
+        self.use_aux_outputs_loss = bool(use_aux_outputs_loss)
+        self.use_boundary_loss = bool(use_boundary_loss)
+        self.gradient_accumulation_steps = max(int(gradient_accumulation_steps), 1)
 
         self.best_record: Optional[Dict[str, float]] = None
         self.best_epoch: Optional[int] = None
@@ -74,6 +80,8 @@ class Trainer:
             boundary_loss_fn=self.boundary_loss_fn,
             boundary_weight=self.boundary_weight,
             include_aux_loss=include_aux_loss_in_eval,
+            use_aux_outputs_loss=self.use_aux_outputs_loss,
+            use_boundary_loss=self.use_boundary_loss,
         )
 
     def _log(self, message: str) -> None:
@@ -99,6 +107,8 @@ class Trainer:
             aux_weights=self.aux_weights,
             boundary_loss_fn=self.boundary_loss_fn,
             boundary_weight=self.boundary_weight,
+            use_aux_outputs=self.use_aux_outputs_loss,
+            use_boundary_output=self.use_boundary_loss,
         )
 
         if hasattr(self.model, "auxiliary_regularization"):
@@ -126,14 +136,15 @@ class Trainer:
         model_aux_meter = AverageMeter()
         model_aux_w_meter = AverageMeter()
 
+        self.optimizer.zero_grad(set_to_none=True)
         for step, batch in enumerate(dataloader, start=1):
             images = batch["image"].to(self.device, non_blocking=True)
             masks = batch["mask"].to(self.device, non_blocking=True)
 
-            self.optimizer.zero_grad(set_to_none=True)
             with torch.amp.autocast(device_type=self.device.type, enabled=self.mixed_precision):
                 model_output = self.model(images)
                 total_loss, log_items = self._compute_total_loss(model_output, masks, epoch=epoch)
+                backward_loss = total_loss / self.gradient_accumulation_steps
 
             if self.debug_logits and (step % self.debug_logits_interval == 0):
                 parsed = parse_model_output(model_output)
@@ -144,12 +155,15 @@ class Trainer:
                     f"masks=[{masks.detach().min().item():.3f},{masks.detach().max().item():.3f}]"
                 )
 
-            self.scaler.scale(total_loss).backward()
-            self.scaler.unscale_(self.optimizer)
-            if self.grad_clip is not None:
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            self.scaler.scale(backward_loss).backward()
+            should_step = (step % self.gradient_accumulation_steps == 0) or (step == len(dataloader))
+            if should_step:
+                self.scaler.unscale_(self.optimizer)
+                if self.grad_clip is not None:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad(set_to_none=True)
 
             loss_meter.update(log_items["loss"], n=images.size(0))
             seg_meter.update(log_items["seg_loss"], n=images.size(0))
@@ -185,6 +199,7 @@ class Trainer:
             "boundary_weight": boundary_w_meter.avg,
             "model_aux_loss": model_aux_meter.avg,
             "model_aux_weight": model_aux_w_meter.avg,
+            "gradient_accumulation_steps": float(self.gradient_accumulation_steps),
             "lr": float(self.optimizer.param_groups[0]["lr"]),
         }
 

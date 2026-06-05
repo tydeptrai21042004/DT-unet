@@ -13,6 +13,9 @@ SUPPORTED_BINARY_SEG_DATASETS = {
     "etis",
     "cvc_colondb",
     "cvc_300",
+    "isic2018",
+    "busi",
+    "drive",
     "custom",
 }
 

@@ -1,7 +1,8 @@
-"""Binary segmentation dataset helpers for Kvasir-SEG and compatible polyp datasets."""
+"""Binary segmentation dataset helpers for Kvasir-SEG and compatible datasets."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, MutableMapping, Optional, Sequence, Tuple
@@ -12,7 +13,7 @@ from torch.utils.data import Dataset
 from .registry import get_dataset_spec, normalize_dataset_name
 from .transforms import build_eval_transforms, build_train_transforms
 
-VALID_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff")
+VALID_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif")
 Sample = MutableMapping[str, object]
 
 
@@ -27,13 +28,119 @@ COMMON_DATASET_DIR_ALIASES: Dict[str, Tuple[str, ...]] = {
     "cvc_clinicdb": ("CVC-ClinicDB", "CVC612", "cvc-clinicdb", "clinicdb", "ClinicDB", "cvc612"),
     "etis": ("ETIS-LaribPolypDB", "ETIS", "etis-larib", "etis_larib", "etis-laribpolypdb"),
     "cvc_colondb": ("CVC-ColonDB", "cvc-colondb", "ColonDB", "colondb"),
-    "cvc_300": ("CVC-300", "cvc-300", "CVC300", "cvc300"),
+    "cvc_300": ("CVC-300", "cvc-300", "CVC300", "cvc300", "EndoScene", "CVC-T"),
+    "isic2018": (
+        "ISIC2018",
+        "ISIC-2018",
+        "ISIC2018_Task1",
+        "ISIC2018_Task1-2_Training_Input",
+        "ISIC2018_Task1_Training_GroundTruth",
+    ),
+    "busi": ("BUSI", "Breast Ultrasound Images Dataset", "Dataset_BUSI_with_GT", "breast-ultrasound-images-dataset"),
+    "drive": ("DRIVE", "Digital Retinal Images for Vessel Extraction", "DRIVE-DB"),
     "custom": tuple(),
+}
+
+
+IMAGE_DIR_NAMES = {
+    "image",
+    "images",
+    "imgs",
+    "img",
+    "original",
+    "originals",
+    "frame",
+    "frames",
+    "jpegimages",
+    "bbdd",
+    "training images",
+    "test images",
+    "training",
+    "test",
+    "isic2018_task1-2_training_input",
+    "isic2018_task1_validation_input",
+    "isic2018_task1_test_input",
+}
+MASK_DIR_NAMES = {
+    "mask",
+    "masks",
+    "gt",
+    "groundtruth",
+    "groundtruths",
+    "ground_truth",
+    "ground_truths",
+    "ground truth",
+    "ground truths",
+    "annotation",
+    "annotations",
+    "label",
+    "labels",
+    "segmentationclass",
+    "segmentationclasses",
+    "manual",
+    "manual1",
+    "1st_manual",
+    "training masks",
+    "test masks",
+    "isic2018_task1_training_groundtruth",
+    "isic2018_task1_validation_groundtruth",
+    "isic2018_task1_test_groundtruth",
 }
 
 
 def _is_image_file(path: Path) -> bool:
     return path.suffix.lower() in VALID_IMAGE_EXTENSIONS
+
+
+def _canonical_dir_key(name: str) -> str:
+    return name.strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def canonical_sample_id(value: str | Path) -> str:
+    """Return a robust pairing key for common binary-segmentation datasets.
+
+    Kvasir/CVC masks usually share the exact image stem. Cross-domain datasets
+    often add suffixes: ISIC uses ``_segmentation``, BUSI uses ``_mask`` or
+    ``_mask_1``, and DRIVE uses ``_manual1``. Removing these suffixes allows one
+    generic image/mask loader to support all of those layouts.
+    """
+    stem = Path(value).stem.lower().strip()
+    stem = stem.replace(" ", "_")
+    stem = re.sub(r"\([0-9]+\)", lambda m: f"_{m.group(0)[1:-1]}", stem)
+    suffix_patterns = [
+        r"_segmentation$",
+        r"_seg$",
+        r"_mask(_\d+)?$",
+        r"_manual\d*$",
+        r"_manual$",
+        r"_gt$",
+        r"_groundtruth$",
+        r"_ground_truth$",
+        r"_truth$",
+        r"_label$",
+        r"_labels$",
+        r"_annotation$",
+        r"_annotations$",
+        r"_1st_manual$",
+        r"_training$",
+        r"_test$",
+    ]
+    changed = True
+    while changed:
+        changed = False
+        for pattern in suffix_patterns:
+            new_stem = re.sub(pattern, "", stem)
+            if new_stem != stem:
+                stem = new_stem
+                changed = True
+    return stem
+
+
+
+
+def looks_like_mask_stem(value: str | Path) -> bool:
+    stem = Path(value).stem.lower().replace(" ", "_")
+    return bool(re.search(r"(_segmentation$|_seg$|_mask(_\d+)?$|_manual\d*$|_gt$|_groundtruth$|_ground_truth$|_label$|_annotation$|_1st_manual$)", stem))
 
 
 def _resolve_existing_dir(candidates: Sequence[Path]) -> Optional[Path]:
@@ -43,31 +150,36 @@ def _resolve_existing_dir(candidates: Sequence[Path]) -> Optional[Path]:
     return None
 
 
-def _resolve_processed_pair(root: Path, image_size: Optional[int] = None) -> Optional[KvasirPaths]:
+def _resolve_processed_pair(root: Path, dataset_name: str = "kvasir_seg", image_size: Optional[int] = None) -> Optional[KvasirPaths]:
     processed_root = root / "processed"
     if not processed_root.is_dir():
         return None
 
-    if image_size is not None:
-        image_dir = processed_root / f"images_{image_size}"
-        mask_dir = processed_root / f"masks_{image_size}"
+    normalized = normalize_dataset_name(dataset_name)
+    candidate_roots = [processed_root / normalized, processed_root / get_dataset_spec(normalized).canonical_dir, processed_root]
+
+    for base in candidate_roots:
+        if not base.is_dir():
+            continue
+        if image_size is not None:
+            image_dir = base / f"images_{image_size}"
+            mask_dir = base / f"masks_{image_size}"
+            if image_dir.is_dir() and mask_dir.is_dir():
+                return KvasirPaths(image_dir=image_dir, mask_dir=mask_dir)
+        image_dir = base / "images"
+        mask_dir = base / "masks"
         if image_dir.is_dir() and mask_dir.is_dir():
             return KvasirPaths(image_dir=image_dir, mask_dir=mask_dir)
 
-    image_dir = processed_root / "images"
-    mask_dir = processed_root / "masks"
-    if image_dir.is_dir() and mask_dir.is_dir():
-        return KvasirPaths(image_dir=image_dir, mask_dir=mask_dir)
-
-    suffixes: list[str] = []
-    for path in processed_root.iterdir():
-        if path.is_dir() and path.name.startswith("images_"):
-            suffixes.append(path.name[len("images_"):])
-    for suffix in sorted(set(suffixes)):
-        image_dir = processed_root / f"images_{suffix}"
-        mask_dir = processed_root / f"masks_{suffix}"
-        if image_dir.is_dir() and mask_dir.is_dir():
-            return KvasirPaths(image_dir=image_dir, mask_dir=mask_dir)
+        suffixes: list[str] = []
+        for path in base.iterdir():
+            if path.is_dir() and path.name.startswith("images_"):
+                suffixes.append(path.name[len("images_"):])
+        for suffix in sorted(set(suffixes)):
+            image_dir = base / f"images_{suffix}"
+            mask_dir = base / f"masks_{suffix}"
+            if image_dir.is_dir() and mask_dir.is_dir():
+                return KvasirPaths(image_dir=image_dir, mask_dir=mask_dir)
     return None
 
 
@@ -98,48 +210,12 @@ def _dir_name_variants(dataset_name: str) -> Tuple[str, ...]:
     return tuple(deduped)
 
 
-IMAGE_DIR_NAMES = {
-    "image",
-    "images",
-    "imgs",
-    "img",
-    "original",
-    "originals",
-    "frame",
-    "frames",
-    "jpegimages",
-    "bbdd",
-}
-MASK_DIR_NAMES = {
-    "mask",
-    "masks",
-    "gt",
-    "groundtruth",
-    "groundtruths",
-    "ground_truth",
-    "ground_truths",
-    "ground truth",
-    "ground truths",
-    "annotation",
-    "annotations",
-    "label",
-    "labels",
-    "segmentationclass",
-    "segmentationclasses",
-}
-
-
-def _canonical_dir_key(name: str) -> str:
-    return name.strip().lower().replace("-", "_").replace(" ", "_")
-
-
 def _resolve_image_mask_dirs(path: Path) -> Optional[KvasirPaths]:
     """Return compatible image/mask directories under ``path``.
 
-    Public polyp archives are not perfectly consistent: Kvasir/PraNet-style
-    bundles usually use ``images`` and ``masks``, while CVC-ClinicDB may use
-    ``Original`` and ``Ground Truth``. This resolver accepts the common names
-    without changing the dataset loader contract.
+    Public segmentation archives are inconsistent. This resolver accepts common
+    Kvasir/PraNet, ISIC, BUSI, and DRIVE directory names without changing the
+    dataset API.
     """
     if not path.is_dir():
         return None
@@ -160,6 +236,16 @@ def _resolve_image_mask_dirs(path: Path) -> Optional[KvasirPaths]:
 
     if image_dir is not None and mask_dir is not None:
         return KvasirPaths(image_dir=image_dir, mask_dir=mask_dir)
+
+    # Some archives place class subfolders directly below the root, e.g.
+    # BUSI/{benign,malignant,normal}. Treat the same directory as both image and
+    # mask root and let canonical_sample_id pair image/mask stems recursively.
+    recursive_files = [p for p in path.rglob("*") if p.is_file() and _is_image_file(p)]
+    if recursive_files:
+        has_mask_like = any(looks_like_mask_stem(p.stem) for p in recursive_files)
+        has_image_like = any(not looks_like_mask_stem(p.stem) for p in recursive_files)
+        if has_mask_like and has_image_like:
+            return KvasirPaths(image_dir=path, mask_dir=path)
     return None
 
 
@@ -212,17 +298,16 @@ def _find_dataset_root(root: Path, dataset_name: str) -> Optional[Path]:
     return None
 
 
-
 def infer_dataset_paths(root: str | Path, dataset_name: str = "kvasir_seg", image_size: Optional[int] = None) -> KvasirPaths:
     """Infer image and mask directories from a benchmark-style root.
 
-    Supported layouts include processed benchmark folders, direct dataset roots,
-    and common raw/train/test bundle structures used by public polyp repositories.
+    Supported layouts include dataset-specific processed folders, legacy flat
+    processed folders, direct dataset roots, and common public archive layouts.
     """
     normalized = normalize_dataset_name(dataset_name)
     root = Path(root)
 
-    processed_pair = _resolve_processed_pair(root, image_size=image_size)
+    processed_pair = _resolve_processed_pair(root, dataset_name=normalized, image_size=image_size)
     if processed_pair is not None:
         return processed_pair
 
@@ -230,7 +315,8 @@ def infer_dataset_paths(root: str | Path, dataset_name: str = "kvasir_seg", imag
     if dataset_root is None:
         spec = get_dataset_spec(normalized)
         expected = (
-            "processed/images_<size> + processed/masks_<size>, "
+            "processed/<dataset>/images_<size> + processed/<dataset>/masks_<size>, "
+            "legacy processed/images_<size> + processed/masks_<size>, "
             f"raw/{spec.canonical_dir}/images + raw/{spec.canonical_dir}/masks, "
             f"or a dataset folder named like {spec.canonical_dir} containing images/ and masks/."
         )
@@ -242,7 +328,6 @@ def infer_dataset_paths(root: str | Path, dataset_name: str = "kvasir_seg", imag
     if resolved is None:  # defensive: _find_dataset_root only returns compatible roots
         raise FileNotFoundError(f"Could not resolve image/mask directories inside {dataset_root}")
     return resolved
-
 
 
 def infer_kvasir_paths(root: str | Path, image_size: Optional[int] = None) -> KvasirPaths:
@@ -288,9 +373,15 @@ class KvasirSegDataset(Dataset):
             raise FileNotFoundError(f"Mask directory does not exist: {self.mask_dir}")
 
         if split_file is None and split is not None:
-            candidate = self.root / "splits" / f"{split}.txt"
-            if candidate.exists():
-                split_file = candidate
+            candidates = [
+                self.root / "splits" / self.dataset_name / f"{split}.txt",
+                self.root / "splits" / f"{self.dataset_name}_{split}.txt",
+                self.root / "splits" / f"{split}.txt",
+            ]
+            for candidate in candidates:
+                if candidate.exists():
+                    split_file = candidate
+                    break
 
         self.samples = self._build_samples(split_file=split_file)
         if not self.samples:
@@ -313,24 +404,45 @@ class KvasirSegDataset(Dataset):
                 item = line.strip()
                 if not item or item.startswith("#"):
                     continue
-                ids.append(Path(item).stem)
+                ids.append(canonical_sample_id(item))
         return ids
 
-    def _find_image_by_stem(self, directory: Path, stem: str) -> Optional[Path]:
+    def _iter_files(self, directory: Path) -> List[Path]:
+        return sorted(p for p in directory.rglob("*") if p.is_file() and _is_image_file(p))
+
+    def _build_file_map(self, directory: Path, *, want_masks: bool) -> Dict[str, Path]:
+        result: Dict[str, Path] = {}
+        for path in self._iter_files(directory):
+            key = canonical_sample_id(path.stem)
+            is_mask_like = looks_like_mask_stem(path.stem)
+            if want_masks and not is_mask_like and directory == self.image_dir:
+                continue
+            if not want_masks and is_mask_like and directory == self.mask_dir:
+                continue
+            # Prefer the first deterministic match. This avoids BUSI duplicate
+            # _mask_1 variants overriding the canonical _mask file.
+            result.setdefault(key, path)
+        return result
+
+    def _find_image_by_stem(self, directory: Path, stem: str, *, want_masks: bool = False) -> Optional[Path]:
         for ext in VALID_IMAGE_EXTENSIONS:
             candidate = directory / f"{stem}{ext}"
             if candidate.exists():
                 return candidate
-        return None
+        key = canonical_sample_id(stem)
+        return self._build_file_map(directory, want_masks=want_masks).get(key)
 
     def _build_samples(self, split_file: Optional[str | Path]) -> List[Tuple[str, Path, Path]]:
         split_ids = self._load_split_ids(split_file)
         samples: List[Tuple[str, Path, Path]] = []
+        image_map = self._build_file_map(self.image_dir, want_masks=False)
+        mask_map = self._build_file_map(self.mask_dir, want_masks=True)
 
         if split_ids is not None:
             for sample_id in split_ids:
-                image_path = self._find_image_by_stem(self.image_dir, sample_id)
-                mask_path = self._find_image_by_stem(self.mask_dir, sample_id)
+                key = canonical_sample_id(sample_id)
+                image_path = image_map.get(key) or self._find_image_by_stem(self.image_dir, sample_id, want_masks=False)
+                mask_path = mask_map.get(key) or self._find_image_by_stem(self.mask_dir, sample_id, want_masks=True)
 
                 if image_path is None or mask_path is None:
                     if self.strict_pairing:
@@ -338,20 +450,18 @@ class KvasirSegDataset(Dataset):
                             f"Missing image or mask for sample '{sample_id}'. image_dir={self.image_dir}, mask_dir={self.mask_dir}"
                         )
                     continue
-                samples.append((sample_id, image_path, mask_path))
+                samples.append((key, image_path, mask_path))
             return samples
 
-        image_files = sorted(p for p in self.image_dir.iterdir() if p.is_file() and _is_image_file(p))
-        for image_path in image_files:
-            sample_id = image_path.stem
-            mask_path = self._find_image_by_stem(self.mask_dir, sample_id)
+        for key, image_path in sorted(image_map.items()):
+            mask_path = mask_map.get(key)
             if mask_path is None:
                 if self.strict_pairing:
                     raise FileNotFoundError(
                         f"No corresponding mask found for image '{image_path.name}' in {self.mask_dir}"
                     )
                 continue
-            samples.append((sample_id, image_path, mask_path))
+            samples.append((key, image_path, mask_path))
         return samples
 
     def __len__(self) -> int:
@@ -381,7 +491,6 @@ class KvasirSegDataset(Dataset):
 
     def get_ids(self) -> List[str]:
         return [sample_id for sample_id, _, _ in self.samples]
-
 
 
 def build_kvasir_datasets(
@@ -430,6 +539,8 @@ def build_kvasir_datasets(
 __all__ = [
     "KvasirPaths",
     "KvasirSegDataset",
+    "canonical_sample_id",
+    "looks_like_mask_stem",
     "infer_dataset_paths",
     "infer_kvasir_paths",
     "build_kvasir_datasets",

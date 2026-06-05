@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 import warnings
 
 import torch
@@ -14,7 +14,36 @@ from ..vendor.pvt_v2_compat import pvt_v2_b0, pvt_v2_b0_fast, pvt_v2_b1, pvt_v2_
 from ..vendor.hardnet import HarDNet
 
 
+DEFAULT_CHECKPOINT_URLS = {
+    "res2net50_v1b_26w_4s": "https://shanghuagao.oss-cn-beijing.aliyuncs.com/res2net/res2net50_v1b_26w_4s-3cf99910.pth",
+    "pvt_v2_b2": "https://github.com/whai362/PVT/releases/download/v2/pvt_v2_b2.pth",
+    "hardnet68": "https://ping-chao.com/hardnet/hardnet68-5d684880.pth",
+}
+
+
+def _unwrap_checkpoint(state):
+    if isinstance(state, dict) and "state_dict" in state and isinstance(state["state_dict"], dict):
+        return state["state_dict"]
+    if isinstance(state, dict) and "model" in state and isinstance(state["model"], dict):
+        return state["model"]
+    return state
+
+
+def _clean_key(key: str) -> str:
+    for prefix in ("module.", "model.", "backbone."):
+        if key.startswith(prefix):
+            key = key[len(prefix):]
+    return key
+
+
 def _load_state_dict(model: nn.Module, checkpoint: str | None = None, url: str | None = None, strict: bool = False) -> bool:
+    """Load a checkpoint with shape-safe filtering.
+
+    Public backbone checkpoints often differ slightly from local adapter key names
+    or include classifier heads. Shape filtering prevents an ImageNet classifier
+    weight from crashing a segmentation benchmark run while still loading all
+    compatible official backbone parameters.
+    """
     if checkpoint:
         path = Path(checkpoint)
         if not path.is_file():
@@ -23,21 +52,32 @@ def _load_state_dict(model: nn.Module, checkpoint: str | None = None, url: str |
         state = torch.load(path, map_location="cpu")
     elif url:
         try:
-            state = torch.hub.load_state_dict_from_url(url, map_location="cpu", progress=False)
+            state = torch.hub.load_state_dict_from_url(url, map_location="cpu", progress=True)
         except Exception as exc:  # pragma: no cover - network-dependent
             warnings.warn(f"Failed to download checkpoint from {url}: {exc}")
             return False
     else:
         return False
-    if isinstance(state, dict) and "state_dict" in state:
-        state = state["state_dict"]
-    if isinstance(state, dict) and "model" in state and isinstance(state["model"], dict):
-        state = state["model"]
-    cleaned = {}
-    for k, v in state.items():
-        nk = k.replace("module.", "")
-        cleaned[nk] = v
-    model.load_state_dict(cleaned, strict=strict)
+
+    state = _unwrap_checkpoint(state)
+    if not isinstance(state, dict):
+        warnings.warn(f"Unsupported checkpoint payload type: {type(state)!r}")
+        return False
+
+    model_state = model.state_dict()
+    cleaned = {_clean_key(str(k)): v for k, v in state.items() if torch.is_tensor(v)}
+    compatible = {k: v for k, v in cleaned.items() if k in model_state and tuple(model_state[k].shape) == tuple(v.shape)}
+    skipped = len(cleaned) - len(compatible)
+
+    if not compatible:
+        warnings.warn("No compatible tensors found in checkpoint; leaving backbone randomly initialized.")
+        return False
+
+    missing, unexpected = model.load_state_dict(compatible, strict=False)
+    if skipped:
+        warnings.warn(f"Skipped {skipped} incompatible checkpoint tensors while loading official backbone.")
+    if strict and (missing or unexpected):
+        warnings.warn(f"Strict checkpoint load requested but missing={len(missing)} unexpected={len(unexpected)}.")
     return True
 
 
@@ -61,6 +101,8 @@ class OfficialRes2NetEncoder(nn.Module):
     """Official Res2Net backbone adapter with projected multi-scale outputs.
 
     Returns five features matching the benchmark contract: [H/2, H/4, H/8, H/16, H/32].
+    If ``pretrained=True`` and no explicit checkpoint path/URL is supplied, the
+    adapter automatically downloads the public Res2Net-50 ImageNet checkpoint.
     """
 
     VARIANTS = {
@@ -88,13 +130,12 @@ class OfficialRes2NetEncoder(nn.Module):
             raise ValueError(f"Unsupported Res2Net variant: {variant}")
         ctor, raw_channels = self.VARIANTS[variant]
         self.backbone = ctor(pretrained=False)
+        if pretrained and not checkpoint and not checkpoint_url:
+            checkpoint_url = DEFAULT_CHECKPOINT_URLS.get(variant)
         if checkpoint or checkpoint_url:
-            _load_state_dict(self.backbone, checkpoint=checkpoint, url=checkpoint_url, strict=False)
-        elif pretrained:
-            warnings.warn(
-                "OfficialRes2NetEncoder pretrained=True was requested without a checkpoint path/url. "
-                "Please provide model.backbone_checkpoint or model.backbone_checkpoint_url for deterministic faithful runs."
-            )
+            loaded = _load_state_dict(self.backbone, checkpoint=checkpoint, url=checkpoint_url, strict=False)
+            if pretrained and not loaded:
+                warnings.warn("Requested Res2Net pretrained=True, but checkpoint loading failed; continuing from random initialization.")
         self.channels = channels
         self.raw_channels = raw_channels
         self.projections = nn.ModuleList(_Projection(ic, oc) for ic, oc in zip(raw_channels, channels))
@@ -113,7 +154,12 @@ class OfficialRes2NetEncoder(nn.Module):
 
 
 class OfficialPVTv2Backbone(nn.Module):
-    """Official PVTv2 backbone adapter with projected stage outputs."""
+    """Official PVTv2 backbone adapter with projected stage outputs.
+
+    If ``pretrained=True`` and no explicit checkpoint path/URL is supplied, the
+    adapter automatically downloads the official PVTv2-B2 ImageNet checkpoint
+    when that variant is used.
+    """
 
     VARIANTS = {
         "pvt_v2_b0": (pvt_v2_b0, (32, 64, 160, 256)),
@@ -143,13 +189,12 @@ class OfficialPVTv2Backbone(nn.Module):
             raise ValueError(f"Unsupported PVTv2 variant: {variant}")
         ctor, raw_channels = self.VARIANTS[variant]
         self.backbone = ctor(img_size=image_size, in_chans=in_channels)
+        if pretrained and not checkpoint and not checkpoint_url:
+            checkpoint_url = DEFAULT_CHECKPOINT_URLS.get(variant)
         if checkpoint or checkpoint_url:
-            _load_state_dict(self.backbone, checkpoint=checkpoint, url=checkpoint_url, strict=False)
-        elif pretrained:
-            warnings.warn(
-                "OfficialPVTv2Backbone pretrained=True was requested without a checkpoint path/url. "
-                "Please provide model.pvt_checkpoint or model.pvt_checkpoint_url for deterministic faithful runs."
-            )
+            loaded = _load_state_dict(self.backbone, checkpoint=checkpoint, url=checkpoint_url, strict=False)
+            if pretrained and not loaded:
+                warnings.warn("Requested PVTv2 pretrained=True, but checkpoint loading failed; continuing from random initialization.")
         self.channels = tuple(int(c) for c in embed_dims)
         self.raw_channels = raw_channels
         self.projections = nn.ModuleList(_Projection(ic, oc) for ic, oc in zip(raw_channels, self.channels))
@@ -178,13 +223,12 @@ class OfficialHarDNetEncoder(nn.Module):
         if in_channels != 3:
             raise ValueError("OfficialHarDNetEncoder currently supports RGB input only.")
         self.backbone = HarDNet(arch=arch, pretrained=False)
+        if pretrained and not checkpoint and not checkpoint_url:
+            checkpoint_url = DEFAULT_CHECKPOINT_URLS.get(f"hardnet{arch}")
         if checkpoint or checkpoint_url:
-            _load_state_dict(self.backbone, checkpoint=checkpoint, url=checkpoint_url, strict=False)
-        elif pretrained:
-            warnings.warn(
-                "OfficialHarDNetEncoder pretrained=True was requested without a checkpoint path/url. "
-                "Please provide model.backbone_checkpoint or model.backbone_checkpoint_url for deterministic faithful runs."
-            )
+            loaded = _load_state_dict(self.backbone, checkpoint=checkpoint, url=checkpoint_url, strict=False)
+            if pretrained and not loaded:
+                warnings.warn("Requested HarDNet pretrained=True, but checkpoint loading failed; continuing from random initialization.")
         self.raw_channels = (32, 128, 256, 640, 1024)
         self.channels = tuple(int(c) for c in channels)
         self.projections = nn.ModuleList(_Projection(ic, oc) for ic, oc in zip(self.raw_channels, self.channels))
@@ -212,6 +256,7 @@ class OfficialHarDNetEncoder(nn.Module):
 
 
 __all__ = [
+    "DEFAULT_CHECKPOINT_URLS",
     "OfficialRes2NetEncoder",
     "OfficialPVTv2Backbone",
     "OfficialHarDNetEncoder",
