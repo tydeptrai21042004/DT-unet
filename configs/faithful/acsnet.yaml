@@ -50,4 +50,4 @@ model:
   act: relu
   backbone_impl: official
   backbone_pretrained: false
-  res2net_variant: res2net50_v1b_26w_4s_fast
+  res2net_variant: res2net50_v1b_26w_4s
