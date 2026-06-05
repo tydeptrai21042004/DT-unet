@@ -15,6 +15,7 @@ from .baselines.unet import UNet
 from .baselines.unet_cbam import UNetCBAM
 from .baselines.unetpp import UNetPlusPlus
 from .proposal.hf_unet import HFUNet
+from .proposal.hc_unet import HFUNetNoGateProposal, HCUNetNoGateProposal
 from .proposal.hf_ablation import (
     HFAblationUNet,
     UNetConvBottleneck,
@@ -68,6 +69,8 @@ __all__ = [
     "CSCAUNet",
     "CSCAUNetLite",
     "HFUNet",
+    "HFUNetNoGateProposal",
+    "HCUNetNoGateProposal",
     "HFAblationUNet",
     "UNetConvBottleneck",
     "UNetFFTGFNetBottleneck",

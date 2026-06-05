@@ -14,6 +14,8 @@ ABLATION_MODELS = [
     "unet_conv_bottleneck",
     "unet_fft_bottleneck",
     "proposal_hf_unet",
+    "proposal_hf_unet_no_gate",
+    "proposal_hc_unet_no_gate",
     "hf_unet_wo_hartley",
     "hf_unet_wo_fourier_kernel",
     "hf_unet_wo_residual",
