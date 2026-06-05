@@ -76,6 +76,9 @@ def load_config_from_args(args: argparse.Namespace) -> Dict[str, Any]:
             "loss": "bce_dice",
             "threshold": 0.5,
             "aux_loss_weight": 1.0,
+            "use_aux_outputs_loss": True,
+            "use_boundary_loss": True,
+            "gradient_accumulation_steps": 1,
             "save_metric": "dice",
             "save_metric_mode": "max",
         },
@@ -273,6 +276,9 @@ def main() -> None:
         debug_logits=bool(cfg["train"].get("debug_logits", False)),
         debug_logits_interval=int(cfg["train"].get("debug_logits_interval", 1)),
         include_aux_loss_in_eval=bool(cfg.get("eval", {}).get("include_aux_loss", False)),
+        use_aux_outputs_loss=bool(cfg["train"].get("use_aux_outputs_loss", True)),
+        use_boundary_loss=bool(cfg["train"].get("use_boundary_loss", True)),
+        gradient_accumulation_steps=int(cfg["train"].get("gradient_accumulation_steps", 1)),
     )
 
     if args.resume:
@@ -343,6 +349,11 @@ def main() -> None:
         "model": model_name,
         "dataset": cfg["data"].get("dataset"),
         "device": resolved_device,
+        "physical_batch_size": int(cfg["data"].get("batch_size", 1)),
+        "gradient_accumulation_steps": int(cfg["train"].get("gradient_accumulation_steps", 1)),
+        "effective_batch_size": int(cfg["data"].get("batch_size", 1)) * int(cfg["train"].get("gradient_accumulation_steps", 1)),
+        "use_aux_outputs_loss": bool(cfg["train"].get("use_aux_outputs_loss", True)),
+        "use_boundary_loss": bool(cfg["train"].get("use_boundary_loss", True)),
         "best_epoch": best_epoch,
         "best_record": best_record,
         "num_train_batches": len(train_loader),

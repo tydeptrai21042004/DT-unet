@@ -37,6 +37,9 @@ train:
   - 0.5
   - 0.7
   - 1.0
+  use_aux_outputs_loss: true
+  use_boundary_loss: true
+  gradient_accumulation_steps: 1
 model:
   name: acsnet
   in_channels: 3

@@ -40,6 +40,9 @@ train:
   - 1.0
   boundary_loss: bce_dice
   boundary_weight: 0.25
+  use_aux_outputs_loss: true
+  use_boundary_loss: true
+  gradient_accumulation_steps: 1
 model:
   name: cfanet
   in_channels: 3

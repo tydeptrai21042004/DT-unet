@@ -70,6 +70,8 @@ def compute_supervised_loss(
     aux_weights: float | Sequence[float] | None = None,
     boundary_loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
     boundary_weight: float = 0.0,
+    use_aux_outputs: bool = True,
+    use_boundary_output: bool = True,
 ) -> tuple[torch.Tensor, dict[str, float], ParsedModelOutput]:
     parsed = parse_model_output(output)
     main_loss = main_loss_fn(parsed.main, masks)
@@ -80,7 +82,7 @@ def compute_supervised_loss(
     }
 
     aux_values: list[float] = []
-    if parsed.aux:
+    if use_aux_outputs and parsed.aux:
         aux_loss_fn = aux_loss_fn or main_loss_fn
         weights = expand_aux_weights(len(parsed.aux), aux_weights)
         for aux_tensor, weight in zip(parsed.aux, weights):
@@ -91,7 +93,7 @@ def compute_supervised_loss(
             log_items["aux_loss"] = float(sum(aux_values) / len(aux_values))
             log_items["aux_weight"] = float(sum(weights) / len(weights))
 
-    if parsed.boundary is not None and boundary_loss_fn is not None and boundary_weight > 0.0:
+    if use_boundary_output and parsed.boundary is not None and boundary_loss_fn is not None and boundary_weight > 0.0:
         boundary_target = masks_to_boundaries(masks)
         boundary_loss = boundary_loss_fn(parsed.boundary, boundary_target)
         total_loss = total_loss + float(boundary_weight) * boundary_loss

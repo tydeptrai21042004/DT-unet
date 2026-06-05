@@ -43,6 +43,9 @@ train:
   - 1.0
   - 1.0
   - 1.0
+  use_aux_outputs_loss: true
+  use_boundary_loss: true
+  gradient_accumulation_steps: 3
 model:
   name: csca_unet
   in_channels: 3
@@ -59,3 +62,6 @@ model:
   faithful_output: true
   attention_mode: paper
   logit_clip: null
+notes:
+  effective_batch_size: physical batch_size=2 with gradient_accumulation_steps=3 gives
+    effective batch size 6.

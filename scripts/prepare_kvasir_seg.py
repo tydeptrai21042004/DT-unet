@@ -34,9 +34,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.datasets import get_dataset_spec, normalize_dataset_name
-from src.datasets.kvasir_seg_dataset import _dir_name_variants, _resolve_image_mask_dirs
+from src.datasets.kvasir_seg_dataset import _dir_name_variants, _resolve_image_mask_dirs, canonical_sample_id, looks_like_mask_stem
 
-VALID_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+VALID_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif"}
 
 
 def _has_image_mask_dirs(path: Path) -> bool:
@@ -80,13 +80,30 @@ def _is_image(path: Path) -> bool:
 
 
 
+def _iter_images(directory: Path) -> List[Path]:
+    return sorted(p for p in directory.rglob("*") if p.is_file() and _is_image(p))
+
+
 def _collect_pairs(image_dir: Path, mask_dir: Path) -> List[Tuple[str, Path, Path]]:
-    images = sorted([p for p in image_dir.iterdir() if p.is_file() and _is_image(p)])
-    mask_map = {p.stem: p for p in mask_dir.iterdir() if p.is_file() and _is_image(p)}
+    image_map = {}
+    mask_map = {}
+    for image_path in _iter_images(image_dir):
+        key = canonical_sample_id(image_path.stem)
+        # When image_dir == mask_dir, skip mask-like files from the image map.
+        if image_dir == mask_dir and looks_like_mask_stem(image_path.stem):
+            continue
+        image_map.setdefault(key, image_path)
+    for mask_path in _iter_images(mask_dir):
+        key = canonical_sample_id(mask_path.stem)
+        # In separate mask folders, exact-stem masks are valid; in shared BUSI-like
+        # folders, require a mask-like suffix so original images are not treated as masks.
+        if image_dir == mask_dir and not looks_like_mask_stem(mask_path.stem):
+            continue
+        mask_map.setdefault(key, mask_path)
+
     pairs: List[Tuple[str, Path, Path]] = []
     missing: List[str] = []
-    for image_path in images:
-        sample_id = image_path.stem
+    for sample_id, image_path in sorted(image_map.items()):
         mask_path = mask_map.get(sample_id)
         if mask_path is None:
             missing.append(sample_id)
@@ -184,8 +201,14 @@ def _maybe_download(url: str, dst: Path, *, verify: bool = True) -> Path:
 
 
 
-def prepared_dataset_exists(data_root: Path, image_size: int) -> bool:
-    return (data_root / "processed" / f"images_{image_size}").is_dir() and (data_root / "processed" / f"masks_{image_size}").is_dir()
+def prepared_dataset_exists(data_root: Path, image_size: int, dataset_name: str = "kvasir_seg") -> bool:
+    dataset_name = normalize_dataset_name(dataset_name)
+    legacy = (data_root / "processed" / f"images_{image_size}").is_dir() and (data_root / "processed" / f"masks_{image_size}").is_dir()
+    dataset_specific = (
+        (data_root / "processed" / dataset_name / f"images_{image_size}").is_dir()
+        and (data_root / "processed" / dataset_name / f"masks_{image_size}").is_dir()
+    )
+    return bool(dataset_specific or legacy)
 
 
 
@@ -214,11 +237,11 @@ def main() -> None:
     spec = get_dataset_spec(dataset_name)
     data_root = Path(args.data_root)
     raw_root = data_root / "raw" / spec.canonical_dir
-    processed_root = data_root / "processed"
+    processed_root = data_root / "processed" / dataset_name
     processed_images = processed_root / f"images_{args.image_size}"
     processed_masks = processed_root / f"masks_{args.image_size}"
 
-    if prepared_dataset_exists(data_root, args.image_size) and not args.force:
+    if prepared_dataset_exists(data_root, args.image_size, dataset_name=dataset_name) and not args.force:
         print(f"Dataset already prepared for image_size={args.image_size} at: {processed_root}")
         print(f"Processed images: {processed_images}")
         print(f"Processed masks : {processed_masks}")

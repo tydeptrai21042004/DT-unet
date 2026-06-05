@@ -49,13 +49,20 @@ def run(cmd: list[str]) -> None:
     subprocess.run(cmd, check=True)
 
 
-def prepared_dataset_exists(data_root: Path, image_size: int) -> bool:
-    return (data_root / "processed" / f"images_{image_size}").is_dir() and (data_root / "processed" / f"masks_{image_size}").is_dir()
+def prepared_dataset_exists(data_root: Path, image_size: int, dataset_name: str = "kvasir_seg") -> bool:
+    dataset_name = normalize_dataset_name(dataset_name)
+    legacy = (data_root / "processed" / f"images_{image_size}").is_dir() and (data_root / "processed" / f"masks_{image_size}").is_dir()
+    dataset_specific = (
+        (data_root / "processed" / dataset_name / f"images_{image_size}").is_dir()
+        and (data_root / "processed" / dataset_name / f"masks_{image_size}").is_dir()
+    )
+    return bool(dataset_specific or legacy)
 
 
-def split_files_exist(data_root: Path) -> bool:
-    splits_root = data_root / "splits"
-    return all((splits_root / f"{name}.txt").is_file() for name in ("train", "val", "test"))
+def split_files_exist(data_root: Path, dataset_name: str = "kvasir_seg") -> bool:
+    dataset_name = normalize_dataset_name(dataset_name)
+    candidates = [data_root / "splits" / dataset_name, data_root / "splits"]
+    return any(all((root / f"{name}.txt").is_file() for name in ("train", "val", "test")) for root in candidates)
 
 
 def build_prepare_cmd(args: argparse.Namespace, py: str) -> list[str]:
@@ -93,11 +100,11 @@ def main() -> None:
     dataset_name = normalize_dataset_name(args.dataset)
     data_root = Path(args.data_root)
 
-    must_prepare = prepared_dataset_exists(data_root, args.image_size) is False
+    must_prepare = prepared_dataset_exists(data_root, args.image_size, dataset_name=dataset_name) is False
     if must_prepare or not args.skip_prepare:
         run(build_prepare_cmd(args, py))
 
-    must_split = split_files_exist(data_root) is False
+    must_split = split_files_exist(data_root, dataset_name=dataset_name) is False
     if must_split or not args.skip_splits:
         run([
             py,
