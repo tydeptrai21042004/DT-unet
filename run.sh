@@ -27,15 +27,18 @@ Usage:
   bash run.sh eval-one MODEL [SPLIT]
   bash run.sh eval-all [SPLIT]
   bash run.sh benchmark
+  bash run.sh benchmark-strict-no-aux
+  bash run.sh benchmark-pretrained
   bash run.sh benchmark-seeds
   bash run.sh ablation
   bash run.sh placement-ablation
   bash run.sh aggregate-seeds
   bash run.sh export
+  bash run.sh download-backbones
 
 Environment overrides:
   PYTHON_BIN   Python executable (default: python)
-  CONFIG_DIR   Config directory (default: configs; use configs/paper_fair for strict paper comparisons)
+  CONFIG_DIR   Config directory (default: configs; use configs/paper_fair, configs/strict_no_aux, or configs/paper_fair_pretrained)
   DATASET      Dataset key (default: kvasir_seg)
   DATA_ROOT    Data root (default: data)
   OUTPUT_ROOT  Output root (default: outputs)
@@ -138,6 +141,19 @@ cmd_benchmark() {
     "${extra[@]}"
 }
 
+
+cmd_benchmark_strict_no_aux() {
+  CONFIG_DIR="configs/strict_no_aux" OUTPUT_ROOT="${OUTPUT_ROOT:-outputs_strict_no_aux}" cmd_benchmark "$@"
+}
+
+cmd_benchmark_pretrained() {
+  CONFIG_DIR="configs/paper_fair_pretrained" OUTPUT_ROOT="${OUTPUT_ROOT:-outputs_paper_fair_pretrained}" cmd_benchmark "$@"
+}
+
+cmd_download_backbones() {
+  "$PYTHON_BIN" scripts/download_official_backbones.py "$@"
+}
+
 cmd_benchmark_seeds() {
   local extra=()
   if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
@@ -205,11 +221,14 @@ main() {
     eval-one) cmd_eval_one "$@" ;;
     eval-all) cmd_eval_all "$@" ;;
     benchmark) cmd_benchmark "$@" ;;
+    benchmark-strict-no-aux) cmd_benchmark_strict_no_aux "$@" ;;
+    benchmark-pretrained) cmd_benchmark_pretrained "$@" ;;
     benchmark-seeds) cmd_benchmark_seeds "$@" ;;
     ablation) cmd_ablation "$@" ;;
     placement-ablation) cmd_placement_ablation "$@" ;;
     aggregate-seeds) cmd_aggregate_seeds "$@" ;;
     export) cmd_export "$@" ;;
+    download-backbones) cmd_download_backbones "$@" ;;
     -h|--help|help|"") usage ;;
     *)
       echo "Unknown command: $action" >&2
