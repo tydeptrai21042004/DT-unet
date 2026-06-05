@@ -25,28 +25,32 @@ DATASET_SPECS = {
         name="cvc_clinicdb",
         aliases=("cvc_clinicdb", "cvc-clinicdb", "clinicdb", "cvc612", "cvc-612"),
         canonical_dir="CVC-ClinicDB",
-        default_download_url=None,
+        # PraNet public training bundle: TrainDataset.zip contains Kvasir-SEG and CVC-ClinicDB.
+        # The preparation script searches inside the archive and extracts only the requested dataset.
+        default_download_url="https://drive.google.com/file/d/1YiGHLw4iTvKdvbT6MgwO9zcCv8zJ_Bnb/view?usp=sharing",
         description="CVC-ClinicDB polyp segmentation dataset.",
     ),
     "etis": DatasetSpec(
         name="etis",
         aliases=("etis", "etis-larib", "etis_larib", "etis-laribpolypdb", "etis_laribpolypdb"),
         canonical_dir="ETIS-LaribPolypDB",
-        default_download_url=None,
+        # PraNet public testing bundle: TestDataset.zip contains ETIS-LaribPolypDB,
+        # CVC-ColonDB, CVC-300, CVC-ClinicDB, and Kvasir test subsets.
+        default_download_url="https://drive.google.com/file/d/1Y2z7FD5p5y31vkZwQQomXFRB0HutHyao/view?usp=sharing",
         description="ETIS-LaribPolypDB polyp segmentation dataset.",
     ),
     "cvc_colondb": DatasetSpec(
         name="cvc_colondb",
         aliases=("cvc_colondb", "cvc-colondb", "colondb", "cvc-colon"),
         canonical_dir="CVC-ColonDB",
-        default_download_url=None,
+        default_download_url="https://drive.google.com/file/d/1Y2z7FD5p5y31vkZwQQomXFRB0HutHyao/view?usp=sharing",
         description="CVC-ColonDB polyp segmentation dataset.",
     ),
     "cvc_300": DatasetSpec(
         name="cvc_300",
         aliases=("cvc_300", "cvc-300", "cvc300"),
         canonical_dir="CVC-300",
-        default_download_url=None,
+        default_download_url="https://drive.google.com/file/d/1Y2z7FD5p5y31vkZwQQomXFRB0HutHyao/view?usp=sharing",
         description="CVC-300 polyp segmentation dataset.",
     ),
     "custom": DatasetSpec(

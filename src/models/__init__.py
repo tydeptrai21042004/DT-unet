@@ -47,6 +47,7 @@ __all__ = [
     "UNet",
     "AttentionUNet",
     "AttentionUNetDecoderBlock",
+    "AttentionGate",
     "UNetCBAM",
     "UNetPlusPlus",
     "ResUNetPlusPlus",
