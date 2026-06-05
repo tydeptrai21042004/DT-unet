@@ -65,15 +65,24 @@ def test_default_benchmark_scripts_include_every_reported_model(script_name: str
     assert not missing, (script_name, missing, defaults)
 
 
-def test_official_faithful_csca_config_is_kept_separate_from_fast_fair_csca_config():
+def test_csca_configs_keep_official_and_fair_faithful_modes_distinct():
     official = yaml.safe_load((PROJECT_ROOT / "configs/official_faithful/csca_unet.yaml").read_text(encoding="utf-8"))
     paper_fair = yaml.safe_load((PROJECT_ROOT / "configs/paper_fair/csca_unet.yaml").read_text(encoding="utf-8"))
+    fair_fast = yaml.safe_load((PROJECT_ROOT / "configs/fair/csca_unet.yaml").read_text(encoding="utf-8"))
 
     assert official["model"]["attention_mode"] == "paper"
     assert official["model"]["deep_supervision"] is True
     assert official["model"]["faithful_output"] is True
     assert official["train"]["loss"] == "structure"
 
-    assert paper_fair["model"]["attention_mode"] == "efficient"
-    assert paper_fair["model"]["deep_supervision"] is False
+    # paper_fair is now the main fair-faithful mode: paper-style architecture,
+    # but still uses the shared bce_dice training protocol and no pretrained backbone.
+    assert paper_fair["model"]["attention_mode"] == "paper"
+    assert paper_fair["model"]["deep_supervision"] is True
+    assert paper_fair["model"]["faithful_output"] is True
     assert paper_fair["train"]["loss"] == "bce_dice"
+
+    # configs/fair remains the lightweight fast-fair mode.
+    assert fair_fast["model"]["attention_mode"] == "efficient"
+    assert fair_fast["model"]["deep_supervision"] is False
+    assert fair_fast["train"]["loss"] == "bce_dice"

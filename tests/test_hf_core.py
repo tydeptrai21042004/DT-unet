@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.engine.trainer import Trainer
+from src.engine.output_utils import parse_model_output
 from src.losses import BCEDiceLoss
 from src.models import build_model
 from src.models.common.blocks import CBAM
@@ -288,9 +289,10 @@ def test_all_models_produce_binary_logit_map_in_fair_setup():
 
         x = torch.randn(1, 3, 64, 64)
         y = model(x)
+        parsed = parse_model_output(y)
 
-        assert isinstance(y, torch.Tensor)
-        assert y.shape[0] == 1
-        assert y.shape[1] == 1
-        assert y.shape[-2:] == (64, 64)
-        assert torch.isfinite(y).all()
+        assert isinstance(parsed.main, torch.Tensor)
+        assert parsed.main.shape[0] == 1
+        assert parsed.main.shape[1] == 1
+        assert parsed.main.shape[-2:] == (64, 64)
+        assert torch.isfinite(parsed.main).all()
