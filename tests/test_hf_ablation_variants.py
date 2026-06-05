@@ -18,6 +18,7 @@ from src.models import build_model
 from src.models.common.blocks import ConvNormAct, SqueezeExcitation
 from src.models.proposal.hf_ablation import ConvBottleneck, FFTGFNetLikeBottleneck, IdentityTransform2d
 from src.models.proposal.hf_bottleneck import FrequencyMixer, HFBottleneck
+from src.models.proposal.hc_bottleneck import HCBottleneck, WeightedHHartleyCosineAxialConv
 from src.models.registry import get_model_class
 
 ABLATION_MODELS = [
@@ -25,6 +26,8 @@ ABLATION_MODELS = [
     "unet_conv_bottleneck",
     "unet_fft_bottleneck",
     "proposal_hf_unet",
+    "proposal_hf_unet_no_gate",
+    "proposal_hc_unet_no_gate",
     "hf_unet_wo_hartley",
     "hf_unet_wo_fourier_kernel",
     "hf_unet_wo_residual",
@@ -138,6 +141,13 @@ def test_compact_ablation_blocks_match_their_declared_purpose():
     assert low_rank.block.mixer.rank == 16
     assert isinstance(high_rank.block.mixer, FrequencyMixer)
     assert high_rank.block.mixer.rank == 32
+
+    proposal_hf_no_gate = build_model("proposal_hf_unet_no_gate", config=_tiny_cfg("proposal_hf_unet_no_gate"))
+    proposal_hc = build_model("proposal_hc_unet_no_gate", config=_tiny_cfg("proposal_hc_unet_no_gate"))
+    assert proposal_hf_no_gate.hf_bottleneck.use_gate is False
+    assert isinstance(proposal_hc.hc_bottleneck, HCBottleneck)
+    assert proposal_hc.hc_bottleneck.use_gate is False
+    assert isinstance(proposal_hc.hc_bottleneck.hc_conv, WeightedHHartleyCosineAxialConv)
 
 
 
