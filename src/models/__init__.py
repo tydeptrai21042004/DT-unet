@@ -16,6 +16,16 @@ from .baselines.unet_cbam import UNetCBAM
 from .baselines.unetpp import UNetPlusPlus
 from .proposal.hf_unet import HFUNet
 from .proposal.hc_unet import HFUNetNoGateProposal, HCUNetNoGateProposal
+from .proposal.hc_ablation import (
+    HCReference,
+    HCWithoutHCBranch,
+    HCSharedKernel,
+    HCLearnableH,
+    HCKernel5,
+    HCIdentityProjection,
+    HCNoChannelExpansion,
+    HC_ABLATION_MODEL_NAMES,
+)
 from .proposal.hf_ablation import (
     HFAblationUNet,
     UNetConvBottleneck,
@@ -72,6 +82,14 @@ __all__ = [
     "HFUNet",
     "HFUNetNoGateProposal",
     "HCUNetNoGateProposal",
+    "HCReference",
+    "HCWithoutHCBranch",
+    "HCSharedKernel",
+    "HCLearnableH",
+    "HCKernel5",
+    "HCIdentityProjection",
+    "HCNoChannelExpansion",
+    "HC_ABLATION_MODEL_NAMES",
     "HFAblationUNet",
     "UNetConvBottleneck",
     "UNetFFTGFNetBottleneck",

@@ -2,6 +2,16 @@ from .hf_bottleneck import HFBottleneck
 from .hf_regularizer import HFRegularizer
 from .hc_bottleneck import HCBottleneck, WeightedHHartleyCosineAxialConv
 from .hc_unet import HFUNetNoGateProposal, HCUNetNoGateProposal
+from .hc_ablation import (
+    HCReference,
+    HCWithoutHCBranch,
+    HCSharedKernel,
+    HCLearnableH,
+    HCKernel5,
+    HCIdentityProjection,
+    HCNoChannelExpansion,
+    HC_ABLATION_MODEL_NAMES,
+)
 from .hf_unet import HFUNet
 from .hf_ablation import (
     HFAblationUNet,
@@ -37,6 +47,14 @@ __all__ = [
     "WeightedHHartleyCosineAxialConv",
     "HFUNetNoGateProposal",
     "HCUNetNoGateProposal",
+    "HCReference",
+    "HCWithoutHCBranch",
+    "HCSharedKernel",
+    "HCLearnableH",
+    "HCKernel5",
+    "HCIdentityProjection",
+    "HCNoChannelExpansion",
+    "HC_ABLATION_MODEL_NAMES",
     "HFAblationUNet",
     "UNetConvBottleneck",
     "UNetFFTGFNetBottleneck",
