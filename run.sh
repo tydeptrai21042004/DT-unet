@@ -32,6 +32,7 @@ Usage:
   bash run.sh benchmark-seeds
   bash run.sh ablation
   bash run.sh placement-ablation
+  bash run.sh hc-ablation
   bash run.sh aggregate-seeds
   bash run.sh export
   bash run.sh download-backbones
@@ -197,6 +198,22 @@ cmd_placement_ablation() {
     "$@"
 }
 
+cmd_hc_ablation() {
+  local extra=()
+  if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
+    extra+=(--allow-insecure-download)
+  fi
+  "$PYTHON_BIN" scripts/run_hc_ablation.py \
+    --dataset "$DATASET" \
+    --data-root "$DATA_ROOT" \
+    --image-size "$IMAGE_SIZE" \
+    --device "$DEVICE" \
+    --output-root "$OUTPUT_ROOT" \
+    --seeds "$SEEDS" \
+    "${extra[@]}" \
+    "$@"
+}
+
 cmd_aggregate_seeds() {
   "$PYTHON_BIN" scripts/aggregate_seed_results.py \
     --output-root "$OUTPUT_ROOT" \
@@ -226,6 +243,7 @@ main() {
     benchmark-seeds) cmd_benchmark_seeds "$@" ;;
     ablation) cmd_ablation "$@" ;;
     placement-ablation) cmd_placement_ablation "$@" ;;
+    hc-ablation) cmd_hc_ablation "$@" ;;
     aggregate-seeds) cmd_aggregate_seeds "$@" ;;
     export) cmd_export "$@" ;;
     download-backbones) cmd_download_backbones "$@" ;;

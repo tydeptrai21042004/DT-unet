@@ -162,3 +162,83 @@ hardnet68
 ```
 
 Use `configs/paper_fair/` for from-scratch fair comparison, `configs/strict_no_aux/` for architecture-only fair comparison, and `configs/paper_fair_pretrained/` for paper-style pretrained-backbone comparison.
+
+## Dedicated HC-U-Net ablation suite
+
+The repository includes a separate HC-only ablation suite. It does not run
+HF-U-Net variants or unrelated segmentation baselines.
+
+| Variant | Purpose |
+|---|---|
+| `hc_reference` | Complete HC-U-Net no-gate reference configuration |
+| `hc_without_hc_branch` | Sets `alpha=0`, disabling the HC residual contribution |
+| `hc_shared_kernel` | Uses one shared height kernel and one shared width kernel across channels |
+| `hc_learnable_h` | Learns a positive `h` instead of fixing `h=1` |
+| `hc_kernel5` | Changes the HC axial kernel size from 3 to 5 |
+| `hc_identity_projection` | Removes learned pre/post projections |
+| `hc_no_channel_expansion` | Changes mixer expansion from 1.5 to 1.0 |
+
+All seven variants use:
+
+- the same U-Net encoder and decoder;
+- the no-gate HC bottleneck;
+- the same BCE-plus-Dice main loss;
+- no auxiliary-output loss;
+- no boundary loss;
+- no proposal-only regularizer;
+- no alpha warm-up.
+
+### Run on Kvasir-SEG
+
+```bash
+python -m pytest -q \
+  tests/test_hc_ablation_variants.py \
+  tests/test_hc_operator_contracts.py
+
+DATASET=kvasir_seg \
+DEVICE=cuda \
+SEEDS=42,1,2 \
+OUTPUT_ROOT=outputs_hc_ablation_kvasir \
+  bash run_hc_ablation.sh
+```
+
+Equivalent command through the main runner:
+
+```bash
+DATASET=kvasir_seg \
+DEVICE=cuda \
+SEEDS=42,1,2 \
+OUTPUT_ROOT=outputs_hc_ablation_kvasir \
+  bash run.sh hc-ablation --batch-size 6 --epochs 30 --num-workers 2
+```
+
+### Run on ISIC 2018
+
+```bash
+DATASET=isic2018 \
+SOURCE_DIR=/kaggle/input/<isic2018-folder> \
+DEVICE=cuda \
+SEEDS=42,1,2 \
+OUTPUT_ROOT=outputs_hc_ablation_isic2018 \
+  bash run_hc_ablation.sh
+```
+
+### Run on BUSI
+
+```bash
+DATASET=busi \
+SOURCE_DIR=/kaggle/input/<busi-folder> \
+DEVICE=cuda \
+SEEDS=42,1,2 \
+OUTPUT_ROOT=outputs_hc_ablation_busi \
+  bash run_hc_ablation.sh
+```
+
+The aggregated table is saved at:
+
+```text
+<OUTPUT_ROOT>/results/tables/multi_seed_summary.csv
+```
+
+The complete configurations are stored in `configs/hc_ablation/` and can also
+be trained individually with `scripts/train_one.py`.
