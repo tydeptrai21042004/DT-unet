@@ -10,6 +10,7 @@ class DatasetSpec:
     aliases: Tuple[str, ...]
     canonical_dir: str
     default_download_url: Optional[str] = None
+    kaggle_handle: Optional[str] = None
     description: str = ""
 
 
@@ -59,14 +60,16 @@ DATASET_SPECS = {
         aliases=("isic2018", "isic-2018", "isic", "isic_task1", "isic2018_task1", "isic_2018_task_1"),
         canonical_dir="ISIC2018",
         default_download_url=None,
-        description="ISIC 2018 Task 1 binary skin-lesion boundary segmentation dataset. Use --source-dir/--zip-path/--download-url because official downloads may require challenge/Kaggle access.",
+        kaggle_handle="tschandl/isic2018-challenge-task1-data-segmentation",
+        description="ISIC 2018 Task 1 binary skin-lesion boundary segmentation dataset. Automatically downloadable with KaggleHub, or usable from --source-dir/--zip-path/--download-url.",
     ),
     "busi": DatasetSpec(
         name="busi",
         aliases=("busi", "dataset_busi", "dataset_busi_with_gt", "breast_ultrasound", "breast-ultrasound", "breast_ultrasound_images_dataset"),
         canonical_dir="Dataset_BUSI_with_GT",
         default_download_url=None,
-        description="BUSI breast ultrasound lesion segmentation dataset. The generic loader pairs *_mask files with the corresponding images.",
+        kaggle_handle="sabahesaraki/breast-ultrasound-images-dataset",
+        description="BUSI breast ultrasound lesion segmentation dataset. Automatically downloadable with KaggleHub; the generic loader pairs *_mask files with the corresponding images.",
     ),
     "drive": DatasetSpec(
         name="drive",

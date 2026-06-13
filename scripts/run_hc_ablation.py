@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--zip-path", type=str, default=None)
     parser.add_argument("--download-url", type=str, default=None)
     parser.add_argument("--download-dst", type=str, default=None)
+    parser.add_argument("--kaggle-handle", type=str, default=None, help="Optional Kaggle dataset handle override.")
     parser.add_argument("--image-size", type=int, default=352)
     parser.add_argument("--batch-size", type=int, default=6)
     parser.add_argument("--epochs", type=int, default=30)
@@ -86,6 +87,7 @@ def main() -> None:
         ("--zip-path", args.zip_path),
         ("--download-url", args.download_url),
         ("--download-dst", args.download_dst),
+        ("--kaggle-handle", args.kaggle_handle),
         ("--lr", args.lr),
     ]
     for flag, value in optional_values:
