@@ -264,6 +264,12 @@ def _maybe_download(url: str, dst: Path, *, verify: bool = True) -> Path:
                 allow_redirects=True,
                 headers=headers,
             ) as response:
+                if response.status_code == 403 and "scholar.cu.edu.eg" in url:
+                    raise RuntimeError(
+                        "The official BUSI server returned HTTP 403 to this runtime. "
+                        "Upload the unchanged official Dataset_BUSI.zip as a Kaggle input "
+                        "or set BUSI_ZIP_PATH=/path/to/Dataset_BUSI.zip."
+                    )
                 response.raise_for_status()
                 with temporary.open("wb") as f:
                     for chunk in response.iter_content(chunk_size=1024 * 1024):
