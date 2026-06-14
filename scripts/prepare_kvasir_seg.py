@@ -6,7 +6,7 @@ Supported input modes:
 2) Zip archive containing a supported dataset
 3) Optional direct download URL (including Google Drive links via gdown if installed)
 4) Automatic default download when a direct URL is configured in the dataset registry
-5) Automatic KaggleHub download when a Kaggle dataset handle is configured
+5) Automatic download from official dataset archives configured in the registry
 
 Outputs a benchmark-friendly layout:
     data/
@@ -27,6 +27,7 @@ import sys
 import zipfile
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
+from urllib.parse import unquote, urlparse
 
 from PIL import Image
 
@@ -172,54 +173,61 @@ def _extract_zip(zip_path: Path, extract_dir: Path, dataset_name: str) -> Path:
 
 
 
-def _resolve_kaggle_dataset_root(
-    kaggle_root: Path,
+def _extract_archive_contents(zip_path: Path, extract_dir: Path) -> None:
+    """Extract one ZIP archive into a shared directory."""
+    if not zip_path.exists():
+        raise FileNotFoundError(f"Zip archive not found: {zip_path}")
+    if not zipfile.is_zipfile(zip_path):
+        raise RuntimeError(f"Downloaded file is not a valid ZIP archive: {zip_path}")
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, "r") as archive:
+        archive.extractall(extract_dir)
+
+
+def _download_filename(url: str, index: int) -> str:
+    name = Path(unquote(urlparse(url).path)).name
+    return name or f"official_archive_{index:02d}.zip"
+
+
+def _download_official_archives(
+    urls: Sequence[str],
+    downloads_dir: Path,
     extract_dir: Path,
     dataset_name: str,
-) -> Optional[Path]:
-    """Locate a dataset inside a KaggleHub download, extracting nested ZIPs if needed."""
-    dataset_root = _find_dataset_root(kaggle_root, dataset_name)
-    if dataset_root is not None:
-        return dataset_root
+    *,
+    verify: bool = True,
+) -> Path:
+    """Download and merge the official archives for a dataset.
 
-    zip_files = sorted(path for path in kaggle_root.rglob("*.zip") if path.is_file())
-    if not zip_files:
-        return None
-
-    extract_dir.mkdir(parents=True, exist_ok=True)
-    for index, zip_path in enumerate(zip_files):
-        destination = extract_dir / f"{index:02d}_{zip_path.stem}"
-        destination.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(zip_path, "r") as archive:
-            archive.extractall(destination)
-
-    return _find_dataset_root(extract_dir, dataset_name)
-
-
-def _download_kaggle_dataset(handle: str) -> Path:
-    """Download a public Kaggle dataset and return its local directory.
-
-    Kaggle notebooks authenticate KaggleHub automatically. Outside Kaggle, the
-    usual Kaggle credentials/environment configuration may be required.
+    ISIC 2018 publishes its input images and segmentation masks as two
+    independent official ZIP archives, so all configured archives are extracted
+    into one shared directory before resolving the image/mask layout.
     """
-    try:
-        import kagglehub
-    except Exception as exc:  # pragma: no cover - exercised through dependency failure only
-        raise RuntimeError(
-            "Kaggle dataset download requested but kagglehub is not installed. "
-            "Install kagglehub or pass --source-dir/--zip-path/--download-url."
-        ) from exc
+    if not urls:
+        raise ValueError(f"No official archive URLs configured for dataset={dataset_name}")
 
-    result = kagglehub.dataset_download(handle)
-    if not result:
-        raise RuntimeError(f"KaggleHub returned an empty path for dataset: {handle}")
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    if extract_dir.exists():
+        shutil.rmtree(extract_dir)
+    extract_dir.mkdir(parents=True, exist_ok=True)
 
-    dataset_path = Path(result).expanduser().resolve()
-    if not dataset_path.is_dir():
-        raise RuntimeError(
-            f"KaggleHub download path is not a directory for dataset={handle}: {dataset_path}"
+    for index, url in enumerate(urls):
+        archive_path = downloads_dir / _download_filename(url, index)
+        if archive_path.exists() and zipfile.is_zipfile(archive_path):
+            print(f"Using cached official archive: {archive_path}")
+        else:
+            archive_path.unlink(missing_ok=True)
+            print(f"Downloading official archive {index + 1}/{len(urls)}: {url}")
+            _maybe_download(url, archive_path, verify=verify)
+        _extract_archive_contents(archive_path, extract_dir)
+
+    dataset_root = _find_dataset_root(extract_dir, dataset_name)
+    if dataset_root is None:
+        raise FileNotFoundError(
+            f"Official archives were downloaded and extracted under {extract_dir}, "
+            f"but no compatible image/mask layout was found for dataset={dataset_name}."
         )
-    return dataset_path
+    return dataset_root
 
 
 def _maybe_download(url: str, dst: Path, *, verify: bool = True) -> Path:
@@ -242,13 +250,34 @@ def _maybe_download(url: str, dst: Path, *, verify: bool = True) -> Path:
         raise RuntimeError("requests is required for download mode. Install it or pass --zip-path/--source-dir.") from exc
 
     dst.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(url, stream=True, timeout=120, verify=verify) as response:
-        response.raise_for_status()
-        with dst.open("wb") as f:
-            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    f.write(chunk)
-    return dst
+    temporary = dst.with_suffix(dst.suffix + ".part")
+    temporary.unlink(missing_ok=True)
+    headers = {"User-Agent": "DT-unet-dataset-downloader/1.0"}
+    last_error: Optional[Exception] = None
+    for attempt in range(1, 4):
+        try:
+            with requests.get(
+                url,
+                stream=True,
+                timeout=(30, 300),
+                verify=verify,
+                allow_redirects=True,
+                headers=headers,
+            ) as response:
+                response.raise_for_status()
+                with temporary.open("wb") as f:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
+            temporary.replace(dst)
+            return dst
+        except Exception as exc:
+            last_error = exc
+            temporary.unlink(missing_ok=True)
+            if attempt == 3:
+                break
+            print(f"[WARN] Download attempt {attempt}/3 failed for {url}: {exc}", file=sys.stderr)
+    raise RuntimeError(f"Failed to download after 3 attempts: {url}") from last_error
 
 
 
@@ -265,13 +294,12 @@ def prepared_dataset_exists(data_root: Path, image_size: int, dataset_name: str 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare a supported binary segmentation dataset for benchmark training.")
-    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Built-in datasets may use a direct URL or KaggleHub handle; custom datasets require an existing local image/mask layout.")
+    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Built-in datasets may use direct official archive URLs; custom datasets require an existing local image/mask layout.")
     parser.add_argument("--data-root", type=str, default="data", help="Benchmark data root.")
     parser.add_argument("--source-dir", type=str, default=None, help="Path to an extracted dataset folder or its parent.")
     parser.add_argument("--zip-path", type=str, default=None, help="Path to a dataset zip archive.")
     parser.add_argument("--download-url", type=str, default=None, help="Optional URL to download a zip archive.")
     parser.add_argument("--download-dst", type=str, default=None, help="Optional destination path for the downloaded zip.")
-    parser.add_argument("--kaggle-handle", type=str, default=None, help="Optional Kaggle dataset handle, for example owner/dataset. Overrides the registry handle.")
     parser.add_argument("--image-size", type=int, default=352, help="Output square size for processed images/masks.")
     parser.add_argument("--skip-raw-copy", action="store_true", help="Do not copy files into data/raw/<dataset>.")
     parser.add_argument("--force", action="store_true", help="Rebuild processed outputs even if they already exist.")
@@ -309,59 +337,39 @@ def main() -> None:
         dataset_root = _extract_zip(Path(args.zip_path), data_root / "_tmp_extract", dataset_name)
     else:
         explicit_download_url = args.download_url
-        explicit_kaggle_handle = args.kaggle_handle
         existing_root = _find_dataset_root(data_root, dataset_name)
+        allow_insecure = bool(
+            args.allow_insecure_download
+            or os.environ.get("ALLOW_INSECURE_DOWNLOAD", "").strip() in {"1", "true", "TRUE", "yes", "YES"}
+        )
 
         if existing_root is not None:
             dataset_root = existing_root
         elif explicit_download_url:
             download_dst = Path(args.download_dst) if args.download_dst else data_root / "downloads" / f"{dataset_name}.zip"
             print(f"Downloading {dataset_name} from explicit URL: {explicit_download_url}")
-            allow_insecure = bool(
-                args.allow_insecure_download
-                or os.environ.get("ALLOW_INSECURE_DOWNLOAD", "").strip() in {"1", "true", "TRUE", "yes", "YES"}
-            )
             zip_path = _maybe_download(explicit_download_url, download_dst, verify=not allow_insecure)
-            dataset_root = _extract_zip(zip_path, data_root / "_tmp_extract", dataset_name)
-        elif explicit_kaggle_handle:
-            print(f"Downloading {dataset_name} from Kaggle: {explicit_kaggle_handle}")
-            kaggle_root = _download_kaggle_dataset(explicit_kaggle_handle)
-            dataset_root = _resolve_kaggle_dataset_root(
-                kaggle_root,
-                data_root / "_tmp_kaggle_extract" / dataset_name,
+            dataset_root = _extract_zip(zip_path, data_root / "_tmp_extract" / dataset_name, dataset_name)
+        elif spec.official_download_urls:
+            print(f"Downloading {dataset_name} from its official dataset source.")
+            if spec.official_source_url:
+                print(f"Official source page: {spec.official_source_url}")
+            dataset_root = _download_official_archives(
+                spec.official_download_urls,
+                data_root / "downloads" / dataset_name,
+                data_root / "_tmp_official_extract" / dataset_name,
                 dataset_name,
+                verify=not allow_insecure,
             )
-            if dataset_root is None:
-                raise FileNotFoundError(
-                    f"Kaggle dataset {explicit_kaggle_handle} was downloaded to {kaggle_root}, "
-                    f"but no compatible image/mask layout was found for dataset={dataset_name}."
-                )
         elif spec.default_download_url:
             download_dst = Path(args.download_dst) if args.download_dst else data_root / "downloads" / f"{dataset_name}.zip"
             print(f"Downloading {dataset_name} from registry URL: {spec.default_download_url}")
-            allow_insecure = bool(
-                args.allow_insecure_download
-                or os.environ.get("ALLOW_INSECURE_DOWNLOAD", "").strip() in {"1", "true", "TRUE", "yes", "YES"}
-            )
             zip_path = _maybe_download(spec.default_download_url, download_dst, verify=not allow_insecure)
-            dataset_root = _extract_zip(zip_path, data_root / "_tmp_extract", dataset_name)
-        elif spec.kaggle_handle:
-            print(f"Downloading {dataset_name} from registry Kaggle handle: {spec.kaggle_handle}")
-            kaggle_root = _download_kaggle_dataset(spec.kaggle_handle)
-            dataset_root = _resolve_kaggle_dataset_root(
-                kaggle_root,
-                data_root / "_tmp_kaggle_extract" / dataset_name,
-                dataset_name,
-            )
-            if dataset_root is None:
-                raise FileNotFoundError(
-                    f"Kaggle dataset {spec.kaggle_handle} was downloaded to {kaggle_root}, "
-                    f"but no compatible image/mask layout was found for dataset={dataset_name}."
-                )
+            dataset_root = _extract_zip(zip_path, data_root / "_tmp_extract" / dataset_name, dataset_name)
         else:
             raise ValueError(
-                f"No automatic download source is configured for dataset={dataset_name}. "
-                "Use --source-dir, --zip-path, --download-url, or --kaggle-handle."
+                f"No automatic official download source is configured for dataset={dataset_name}. "
+                "Use --source-dir, --zip-path, or --download-url."
             )
 
     resolved_dirs = _resolve_image_mask_dirs(dataset_root)

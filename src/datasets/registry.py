@@ -10,7 +10,8 @@ class DatasetSpec:
     aliases: Tuple[str, ...]
     canonical_dir: str
     default_download_url: Optional[str] = None
-    kaggle_handle: Optional[str] = None
+    official_download_urls: Tuple[str, ...] = ()
+    official_source_url: Optional[str] = None
     description: str = ""
 
 
@@ -60,16 +61,23 @@ DATASET_SPECS = {
         aliases=("isic2018", "isic-2018", "isic", "isic_task1", "isic2018_task1", "isic_2018_task_1"),
         canonical_dir="ISIC2018",
         default_download_url=None,
-        kaggle_handle="tschandl/isic2018-challenge-task1-data-segmentation",
-        description="ISIC 2018 Task 1 binary skin-lesion boundary segmentation dataset. Automatically downloadable with KaggleHub, or usable from --source-dir/--zip-path/--download-url.",
+        official_download_urls=(
+            "https://isic-archive.s3.amazonaws.com/challenges/2018/ISIC2018_Task1-2_Training_Input.zip",
+            "https://isic-archive.s3.amazonaws.com/challenges/2018/ISIC2018_Task1_Training_GroundTruth.zip",
+        ),
+        official_source_url="https://challenge.isic-archive.com/data/",
+        description="ISIC 2018 Task 1 binary skin-lesion boundary segmentation dataset. Automatically downloaded from the official ISIC Challenge archive.",
     ),
     "busi": DatasetSpec(
         name="busi",
         aliases=("busi", "dataset_busi", "dataset_busi_with_gt", "breast_ultrasound", "breast-ultrasound", "breast_ultrasound_images_dataset"),
         canonical_dir="Dataset_BUSI_with_GT",
         default_download_url=None,
-        kaggle_handle="sabahesaraki/breast-ultrasound-images-dataset",
-        description="BUSI breast ultrasound lesion segmentation dataset. Automatically downloadable with KaggleHub; the generic loader pairs *_mask files with the corresponding images.",
+        official_download_urls=(
+            "https://scholar.cu.edu.eg/Dataset_BUSI.zip",
+        ),
+        official_source_url="https://scholar.cu.edu.eg/?q=afahmy/pages/dataset",
+        description="BUSI breast ultrasound lesion segmentation dataset. Automatically downloaded from the official Cairo University dataset page; the generic loader pairs *_mask files with corresponding images.",
     ),
     "drive": DatasetSpec(
         name="drive",

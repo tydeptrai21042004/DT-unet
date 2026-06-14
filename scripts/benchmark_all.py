@@ -21,14 +21,13 @@ DEFAULT_MODELS = "unet,attention_unet,unet_cbam,unetpp,resunetpp,pranet,acsnet,h
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run data prep, split generation, training, evaluation, and export.")
     parser.add_argument("--models", type=str, default=DEFAULT_MODELS, help="Comma-separated model names for train_all/eval_all")
-    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Supported datasets can auto-download through a registry URL or KaggleHub handle.")
+    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Supported datasets can auto-download from registry-configured official archives.")
     parser.add_argument("--config-dir", type=str, default="configs")
     parser.add_argument("--data-root", type=str, default="data")
     parser.add_argument("--source-dir", type=str, default=None)
     parser.add_argument("--zip-path", type=str, default=None)
     parser.add_argument("--download-url", type=str, default=None)
     parser.add_argument("--download-dst", type=str, default=None)
-    parser.add_argument("--kaggle-handle", type=str, default=None, help="Optional Kaggle dataset handle override.")
     parser.add_argument("--image-size", type=int, default=352)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None)
@@ -85,12 +84,8 @@ def build_prepare_cmd(args: argparse.Namespace, py: str) -> list[str]:
         cmd += ["--zip-path", args.zip_path]
     if args.download_url:
         cmd += ["--download-url", args.download_url]
-    elif getattr(args, "kaggle_handle", None):
-        cmd += ["--kaggle-handle", args.kaggle_handle]
     elif spec.default_download_url and not args.source_dir and not args.zip_path:
         cmd += ["--download-url", spec.default_download_url]
-    elif spec.kaggle_handle and not args.source_dir and not args.zip_path:
-        cmd += ["--kaggle-handle", spec.kaggle_handle]
     if args.download_dst:
         cmd += ["--download-dst", args.download_dst]
     if getattr(args, "allow_insecure_download", False):
