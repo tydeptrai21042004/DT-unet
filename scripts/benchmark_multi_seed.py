@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-predictions", action="store_true")
     parser.add_argument("--save-visualizations", action="store_true")
     parser.add_argument("--allow-insecure-download", action="store_true")
+    parser.add_argument(
+        "--delete-checkpoints-after-eval",
+        action="store_true",
+        help="Delete model checkpoint directories after each seed has been evaluated. Keeps metrics/results and prevents multi-seed runs from exhausting disk.",
+    )
     return parser.parse_args()
 
 
@@ -50,6 +56,26 @@ def _run(cmd: list[str]) -> None:
     print("[RUN]", " ".join(cmd))
     subprocess.run(cmd, check=True)
 
+
+
+def _delete_checkpoint_dirs(seed_output_root: Path) -> tuple[int, int]:
+    """Remove checkpoint directories after evaluation, returning (dirs, bytes)."""
+    removed_dirs = 0
+    removed_bytes = 0
+    if not seed_output_root.exists():
+        return removed_dirs, removed_bytes
+    for checkpoint_dir in seed_output_root.rglob("checkpoints"):
+        if not checkpoint_dir.is_dir():
+            continue
+        for path in checkpoint_dir.rglob("*"):
+            if path.is_file():
+                try:
+                    removed_bytes += path.stat().st_size
+                except OSError:
+                    pass
+        shutil.rmtree(checkpoint_dir, ignore_errors=True)
+        removed_dirs += 1
+    return removed_dirs, removed_bytes
 
 
 def main() -> None:
@@ -95,6 +121,12 @@ def main() -> None:
         if args.allow_insecure_download:
             cmd.append("--allow-insecure-download")
         _run(cmd)
+        if args.delete_checkpoints_after_eval:
+            removed_dirs, removed_bytes = _delete_checkpoint_dirs(seed_output_root)
+            print(
+                f"[DISK CLEANUP] seed={seed}: removed {removed_dirs} checkpoint directories "
+                f"({removed_bytes / (1024 ** 3):.2f} GiB); metrics and exported results were kept."
+            )
 
     _run([
         py,

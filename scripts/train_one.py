@@ -36,7 +36,7 @@ from src.utils import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train one model.")
     parser.add_argument("--model", type=str, required=True, help="Registered model name, e.g. unet or proposal_hf_unet")
-    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Supports Kvasir-SEG, CVC-ClinicDB, ETIS, CVC-ColonDB, CVC-300, and custom.")
+    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Supports all datasets registered in src/datasets/registry.py.")
     parser.add_argument("--config", type=str, default=None, help="Path to YAML config")
     parser.add_argument("--data-root", type=str, default=None)
     parser.add_argument("--image-size", type=int, default=None)

@@ -25,11 +25,13 @@ import os
 import shutil
 import sys
 import zipfile
+from html.parser import HTMLParser
+from urllib.parse import urljoin
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 from urllib.parse import unquote, urlparse
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -71,7 +73,7 @@ def _find_dataset_root(root: Path, dataset_name: str) -> Optional[Path]:
         if not cand.is_dir() or not _has_image_mask_dirs(cand):
             continue
         path_text = cand.as_posix().lower()
-        if normalized == "custom" or any(keyword in path_text for keyword in keywords):
+        if any(keyword in path_text for keyword in keywords):
             return cand
     return None
 
@@ -264,12 +266,6 @@ def _maybe_download(url: str, dst: Path, *, verify: bool = True) -> Path:
                 allow_redirects=True,
                 headers=headers,
             ) as response:
-                if response.status_code == 403 and "scholar.cu.edu.eg" in url:
-                    raise RuntimeError(
-                        "The official BUSI server returned HTTP 403 to this runtime. "
-                        "Upload the unchanged official Dataset_BUSI.zip as a Kaggle input "
-                        "or set BUSI_ZIP_PATH=/path/to/Dataset_BUSI.zip."
-                    )
                 response.raise_for_status()
                 with temporary.open("wb") as f:
                     for chunk in response.iter_content(chunk_size=1024 * 1024):
@@ -287,6 +283,96 @@ def _maybe_download(url: str, dst: Path, *, verify: bool = True) -> Path:
 
 
 
+
+class _DirectoryIndexParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.links: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag.lower() != "a":
+            return
+        href = dict(attrs).get("href")
+        if href:
+            self.links.append(str(href))
+
+
+def _download_index_files(base_url: str, destination: Path, *, verify: bool = True) -> None:
+    """Download all image files exposed by an official HTTP directory index."""
+    import requests
+
+    destination.mkdir(parents=True, exist_ok=True)
+    response = requests.get(base_url, timeout=(30, 120), verify=verify, headers={"User-Agent": "DT-unet-dataset-downloader/2.0"})
+    response.raise_for_status()
+    parser = _DirectoryIndexParser()
+    parser.feed(response.text)
+    links = [href for href in parser.links if Path(href.split("?", 1)[0]).suffix.lower() in VALID_EXTS]
+    if not links:
+        raise RuntimeError(f"No image files found in official directory index: {base_url}")
+    for index, href in enumerate(links, start=1):
+        url = urljoin(base_url, href)
+        dst = destination / Path(href.split("?", 1)[0]).name
+        if not dst.exists():
+            print(f"Downloading {index}/{len(links)}: {dst.name}")
+            _maybe_download(url, dst, verify=verify)
+
+
+def _prepare_montgomery_official(data_root: Path, *, verify: bool = True) -> Path:
+    base = "https://data.lhncbc.nlm.nih.gov/public/Tuberculosis-Chest-X-ray-Datasets/Montgomery-County-CXR-Set/MontgomerySet/"
+    download_root = data_root / "downloads" / "montgomery_lung"
+    images = download_root / "CXR_png"
+    left = download_root / "ManualMask" / "leftMask"
+    right = download_root / "ManualMask" / "rightMask"
+    _download_index_files(urljoin(base, "CXR_png/"), images, verify=verify)
+    _download_index_files(urljoin(base, "ManualMask/leftMask/"), left, verify=verify)
+    _download_index_files(urljoin(base, "ManualMask/rightMask/"), right, verify=verify)
+
+    merged_root = data_root / "_tmp_official_extract" / "montgomery_lung"
+    out_images = merged_root / "images"
+    out_masks = merged_root / "masks"
+    if merged_root.exists():
+        shutil.rmtree(merged_root)
+    out_images.mkdir(parents=True)
+    out_masks.mkdir(parents=True)
+    left_map = {canonical_sample_id(x.stem): x for x in _iter_images(left)}
+    right_map = {canonical_sample_id(x.stem): x for x in _iter_images(right)}
+    count = 0
+    for image_path in _iter_images(images):
+        key = canonical_sample_id(image_path.stem)
+        if key not in left_map or key not in right_map:
+            raise RuntimeError(f"Missing left/right Montgomery mask for {image_path.name}")
+        shutil.copy2(image_path, out_images / image_path.name)
+        lm = Image.open(left_map[key]).convert("L")
+        rm = Image.open(right_map[key]).convert("L")
+        merged = ImageChops.lighter(lm, rm).point(lambda value: 255 if value > 0 else 0)
+        merged.save(out_masks / f"{image_path.stem}.png")
+        count += 1
+    if count == 0:
+        raise RuntimeError("No Montgomery image/mask pairs were created")
+    print(f"Merged left/right lung masks for {count} Montgomery radiographs.")
+    return merged_root
+
+
+def _warn_hyper_kvasir_overlap(data_root: Path, hyper_pairs: Sequence[Tuple[str, Path, Path]]) -> None:
+    """Warn about filename overlap; never merge Kvasir collections implicitly."""
+    candidates = (
+        data_root / "raw" / get_dataset_spec("kvasir_seg").canonical_dir,
+        data_root / "processed" / "kvasir_seg",
+    )
+    kvasir_root = next((path for path in candidates if path.is_dir() and _has_image_mask_dirs(path)), None)
+    if kvasir_root is None:
+        return
+    resolved = _resolve_image_mask_dirs(kvasir_root)
+    if resolved is None:
+        return
+    existing_ids = {canonical_sample_id(path.stem) for path in _iter_images(resolved.image_dir)}
+    overlap = sorted(existing_ids.intersection(sample_id for sample_id, _, _ in hyper_pairs))
+    if overlap:
+        report = data_root / "processed" / "hyper_kvasir_seg" / "overlap_with_kvasir_seg.txt"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text("\n".join(overlap) + "\n", encoding="utf-8")
+        print(f"[WARN] HyperKvasir has {len(overlap)} filename IDs overlapping Kvasir-SEG. They remain separate; report: {report}", file=sys.stderr)
+
 def prepared_dataset_exists(data_root: Path, image_size: int, dataset_name: str = "kvasir_seg") -> bool:
     dataset_name = normalize_dataset_name(dataset_name)
     legacy = (data_root / "processed" / f"images_{image_size}").is_dir() and (data_root / "processed" / f"masks_{image_size}").is_dir()
@@ -300,7 +386,7 @@ def prepared_dataset_exists(data_root: Path, image_size: int, dataset_name: str 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare a supported binary segmentation dataset for benchmark training.")
-    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Built-in datasets may use direct official archive URLs; custom datasets require an existing local image/mask layout.")
+    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Registered dataset key. Public datasets are downloaded from their configured institutional sources when needed.")
     parser.add_argument("--data-root", type=str, default="data", help="Benchmark data root.")
     parser.add_argument("--source-dir", type=str, default=None, help="Path to an extracted dataset folder or its parent.")
     parser.add_argument("--zip-path", type=str, default=None, help="Path to a dataset zip archive.")
@@ -317,9 +403,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     dataset_name = normalize_dataset_name(args.dataset)
-    if dataset_name == "custom":
-        raise ValueError("Custom datasets are not auto-preparable. Use your own images/masks layout and split files.")
-
     spec = get_dataset_spec(dataset_name)
     data_root = Path(args.data_root)
     raw_root = data_root / "raw" / spec.canonical_dir
@@ -356,6 +439,9 @@ def main() -> None:
             print(f"Downloading {dataset_name} from explicit URL: {explicit_download_url}")
             zip_path = _maybe_download(explicit_download_url, download_dst, verify=not allow_insecure)
             dataset_root = _extract_zip(zip_path, data_root / "_tmp_extract" / dataset_name, dataset_name)
+        elif dataset_name == "montgomery_lung":
+            print("Downloading Montgomery lung images and masks from the official NLM directory.")
+            dataset_root = _prepare_montgomery_official(data_root, verify=not allow_insecure)
         elif spec.official_download_urls:
             print(f"Downloading {dataset_name} from its official dataset source.")
             if spec.official_source_url:
@@ -384,6 +470,8 @@ def main() -> None:
     image_dir = resolved_dirs.image_dir
     mask_dir = resolved_dirs.mask_dir
     pairs = _collect_pairs(image_dir, mask_dir)
+    if dataset_name == "hyper_kvasir_seg":
+        _warn_hyper_kvasir_overlap(data_root, pairs)
 
     if not args.skip_raw_copy:
         _copy_raw_pairs(pairs, raw_root / "images", raw_root / "masks")

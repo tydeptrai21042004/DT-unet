@@ -26,7 +26,7 @@ from src.utils import ExperimentPaths, dump_yaml, get_logger, load_yaml, resolve
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate one checkpoint.")
     parser.add_argument("--model", type=str, required=True)
-    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Supports Kvasir-SEG, CVC-ClinicDB, ETIS, CVC-ColonDB, CVC-300, and custom.")
+    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Supports all datasets registered in src/datasets/registry.py.")
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint. Defaults to <output-root>/<model>/checkpoints/best.pt")
     parser.add_argument("--split", type=str, default="test", choices=["train", "val", "test"])

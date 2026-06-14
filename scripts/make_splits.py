@@ -57,7 +57,7 @@ def _write_list(items: Sequence[str], path: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create deterministic train/val/test split text files.")
-    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Supports Kvasir-SEG, CVC-ClinicDB, ETIS, CVC-ColonDB, CVC-300, and custom.")
+    parser.add_argument("--dataset", type=str, default="kvasir_seg", help="Dataset key. Supports all datasets registered in src/datasets/registry.py.")
     parser.add_argument("--data-root", type=str, default="data", help="Benchmark data root.")
     parser.add_argument("--image-size", type=int, default=None, help="Preferred processed image size, e.g. 352.")
     parser.add_argument("--train-ratio", type=float, default=0.8)
