@@ -24,8 +24,8 @@ OUTPUT_ROOT="${OUTPUT_ROOT:-outputs_hc_session_${SESSION}}"
 INSTALL_DEPS="${INSTALL_DEPS:-1}"
 RUN_TESTS="${RUN_TESTS:-1}"
 ALLOW_INSECURE_DOWNLOAD="${ALLOW_INSECURE_DOWNLOAD:-1}"
-BUSI_ZIP_PATH="${BUSI_ZIP_PATH:-}"
-AUTO_FIND_KAGGLE_INPUT="${AUTO_FIND_KAGGLE_INPUT:-1}"
+DELETE_CHECKPOINTS_AFTER_EVAL="${DELETE_CHECKPOINTS_AFTER_EVAL:-1}"
+CLEAN_DOWNLOAD_ARCHIVES="${CLEAN_DOWNLOAD_ARCHIVES:-1}"
 
 HC_MODEL="proposal_hc_unet_no_gate"
 NEW_DATASET=""
@@ -47,22 +47,23 @@ case "$SESSION" in
     HC_ABLATIONS="hc_without_hc_branch,hc_shared_kernel"
     ;;
   3)
-    NEW_DATASET="busi"
+    NEW_DATASET="kvasir_instrument"
     NEW_MODELS="unet,unetpp,pranet,acsnet,hardnet_mseg,proposal_hc_unet_no_gate"
     EXISTING_DATASET="cvc_colondb"
     HC_ABLATIONS="hc_learnable_h"
     ;;
   4)
-    NEW_DATASET="busi"
+    NEW_DATASET="montgomery_lung"
     NEW_MODELS="polyp_pvt,caranet,hsnet,cfanet,resunetpp"
-    EXISTING_DATASET=""
+    EXISTING_DATASET="hyper_kvasir_seg"
     HC_ABLATIONS="hc_kernel5,hc_identity_projection,hc_no_channel_expansion"
     ;;
 esac
 
 if [[ "$INSTALL_DEPS" == "1" ]]; then
   "$PYTHON_BIN" -m pip install -q --upgrade pip
-  "$PYTHON_BIN" -m pip install -q -r requirements.txt pytest
+  "$PYTHON_BIN" -m pip install -q --no-cache-dir -r requirements.txt pytest
+  "$PYTHON_BIN" -m pip cache purge >/dev/null 2>&1 || true
 fi
 
 if [[ "$RUN_TESTS" == "1" ]]; then
@@ -80,43 +81,6 @@ fi
 rm -rf "$OUTPUT_ROOT"
 mkdir -p "$OUTPUT_ROOT"
 
-find_busi_zip() {
-  local candidate=""
-
-  if [[ -n "$BUSI_ZIP_PATH" ]]; then
-    printf '%s\n' "$BUSI_ZIP_PATH"
-    return 0
-  fi
-
-  if [[ "$AUTO_FIND_KAGGLE_INPUT" == "1" && -d /kaggle/input ]]; then
-    candidate="$(find /kaggle/input -type f \
-      \( -iname 'Dataset_BUSI.zip' -o -iname '*BUSI*.zip' \) \
-      -print -quit 2>/dev/null || true)"
-  fi
-
-  printf '%s\n' "$candidate"
-}
-
-validate_zip_archive() {
-  local archive_path="$1"
-
-  [[ -f "$archive_path" ]] || {
-    echo "ERROR: Dataset archive does not exist: $archive_path" >&2
-    return 1
-  }
-
-  "$PYTHON_BIN" - "$archive_path" <<'PY_VALIDATE_ZIP'
-import sys
-import zipfile
-from pathlib import Path
-
-archive = Path(sys.argv[1])
-if not zipfile.is_zipfile(archive):
-    raise SystemExit(f"ERROR: Not a valid ZIP archive: {archive}")
-print(f"Validated dataset archive: {archive} ({archive.stat().st_size} bytes)")
-PY_VALIDATE_ZIP
-}
-
 prepare_dataset() {
   local dataset_name="$1"
   local archive_path=""
@@ -131,21 +95,7 @@ prepare_dataset() {
   echo "Prepare ${dataset_name}"
   echo "============================================================"
 
-  if [[ "$dataset_name" == "busi" ]]; then
-    archive_path="$(find_busi_zip)"
-    if [[ -n "$archive_path" ]]; then
-      validate_zip_archive "$archive_path"
-      echo "Using supplied official BUSI archive: $archive_path"
-      prepare_args+=(--zip-path "$archive_path")
-    else
-      echo "No local BUSI archive found; trying the registry official URL."
-      echo "If the official server returns HTTP 403, upload Dataset_BUSI.zip"
-      echo "as a Kaggle input or set BUSI_ZIP_PATH=/path/to/Dataset_BUSI.zip."
-      if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
-        prepare_args+=(--allow-insecure-download)
-      fi
-    fi
-  elif [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
+  if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
     prepare_args+=(--allow-insecure-download)
   fi
 
@@ -165,6 +115,13 @@ prepare_dataset() {
     }
     printf '%-8s %s\n' "$split_name:" "$(wc -l < "$split_path")"
   done
+
+  if [[ "$CLEAN_DOWNLOAD_ARCHIVES" == "1" ]]; then
+    rm -rf "$DATA_ROOT/downloads/$dataset_name" \
+           "$DATA_ROOT/downloads/${dataset_name}.zip" \
+           "$DATA_ROOT/_tmp_official_extract/$dataset_name"
+    echo "[DISK CLEANUP] Removed downloaded archives/temp extraction for $dataset_name; processed data was kept."
+  fi
 }
 
 run_multi_seed() {
@@ -176,6 +133,9 @@ run_multi_seed() {
 
   if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
     extra+=(--allow-insecure-download)
+  fi
+  if [[ "$DELETE_CHECKPOINTS_AFTER_EVAL" == "1" ]]; then
+    extra+=(--delete-checkpoints-after-eval)
   fi
 
   "$PYTHON_BIN" scripts/benchmark_multi_seed.py \
@@ -193,9 +153,14 @@ run_multi_seed() {
     "${extra[@]}"
 }
 
-# Each session prepares only its required cross-domain dataset. ISIC 2018 and
-# BUSI are downloaded automatically from registry-configured official archives.
+# Each session prepares its required cross-domain dataset from public institutional sources.
 prepare_dataset "$NEW_DATASET"
+
+# HyperKvasir is a new public benchmark used by Session 4 as the HC-only
+# comparison dataset, so prepare it explicitly before launching that run.
+if [[ "$EXISTING_DATASET" == "hyper_kvasir_seg" ]]; then
+  prepare_dataset "$EXISTING_DATASET"
+fi
 
 run_multi_seed \
   "$NEW_MODELS" \
@@ -230,7 +195,6 @@ run_multi_seed \
   echo "seeds=$SEEDS"
   echo "device=$DEVICE"
   echo "dataset_download_source=official_archive_or_registry"
-  echo "busi_zip_path=${BUSI_ZIP_PATH:-auto}"
 } > "$OUTPUT_ROOT/session_manifest.txt"
 
 find "$OUTPUT_ROOT" -type f \

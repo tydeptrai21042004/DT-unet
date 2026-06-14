@@ -279,3 +279,15 @@ ISIC 2018 is downloaded from the official ISIC Challenge archives:
 official Cairo University archive `https://scholar.cu.edu.eg/Dataset_BUSI.zip`.
 A local `--source-dir`, zip, or explicit direct URL override remains available.
 
+
+## Public cross-domain datasets
+
+The active automatic datasets include `kvasir_instrument`, `hyper_kvasir_seg`, and `montgomery_lung`. BUSI, DRIVE, and the generic `custom` registry entry were removed.
+
+```bash
+python scripts/prepare_dataset.py --dataset kvasir_instrument --data-root data --image-size 352
+python scripts/prepare_dataset.py --dataset hyper_kvasir_seg --data-root data --image-size 352
+python scripts/prepare_dataset.py --dataset montgomery_lung --data-root data --image-size 352
+```
+
+Only the small HyperKvasir segmentation archive is downloaded. Montgomery left/right masks are merged automatically. HyperKvasir and Kvasir-SEG remain separate and an overlap report is written if matching IDs are detected.

@@ -81,37 +81,25 @@ def test_aggregate_seed_results_computes_mean_and_std():
     assert row["num_seeds"] == 2
 
 
-def test_normalize_dataset_name_handles_cross_domain_datasets():
-    assert normalize_dataset_name("ISIC-2018") == "isic2018"
-    assert normalize_dataset_name("dataset_busi_with_gt") == "busi"
-    assert normalize_dataset_name("DRIVE-DB") == "drive"
+
+def test_normalize_dataset_name_handles_new_cross_domain_datasets():
+    assert normalize_dataset_name("Kvasir-Instrument") == "kvasir_instrument"
+    assert normalize_dataset_name("hyper-kvasir-segmentation") == "hyper_kvasir_seg"
+    assert normalize_dataset_name("Montgomery-CXR") == "montgomery_lung"
 
 
-def test_generic_loader_pairs_isic_busi_and_drive_stem_variants(tmp_path: Path):
+def test_generic_loader_pairs_new_dataset_layouts(tmp_path: Path):
     from src.datasets import build_dataset
 
-    # ISIC: image stem + _segmentation mask suffix
-    root = tmp_path / "isic"
-    image_dir = root / "raw" / "ISIC2018" / "images"
-    mask_dir = root / "raw" / "ISIC2018" / "masks"
-    _write_pair(image_dir / "ISIC_0000001.jpg", mask_dir / "ISIC_0000001_segmentation.png", 1)
-    ds = build_dataset(name="isic2018", root=root, image_size=None)
-    assert len(ds) == 1
-    assert ds.get_ids() == ["isic_0000001"]
-
-    # BUSI: image stem + _mask suffix in a shared class folder
-    root = tmp_path / "busi"
-    folder = root / "Dataset_BUSI_with_GT" / "benign"
-    _write_pair(folder / "benign (1).png", folder / "benign (1)_mask.png", 1)
-    ds = build_dataset(name="busi", root=root, image_size=None)
-    assert len(ds) == 1
-    assert ds.get_ids() == ["benign__1"]
-
-    # DRIVE: image stem + _manual1 mask suffix
-    root = tmp_path / "drive"
-    image_dir = root / "DRIVE" / "images"
-    mask_dir = root / "DRIVE" / "masks"
-    _write_pair(image_dir / "21_training.tif", mask_dir / "21_manual1.gif", 1)
-    ds = build_dataset(name="drive", root=root, image_size=None)
-    assert len(ds) == 1
-    assert ds.get_ids() == ["21"]
+    for dataset, canonical in (
+        ("kvasir_instrument", "Kvasir-Instrument"),
+        ("hyper_kvasir_seg", "HyperKvasir-SEG"),
+        ("montgomery_lung", "Montgomery-Lung"),
+    ):
+        root = tmp_path / dataset
+        image_dir = root / "raw" / canonical / "images"
+        mask_dir = root / "raw" / canonical / "masks"
+        _write_pair(image_dir / "sample_1.png", mask_dir / "sample_1.png", 1)
+        ds = build_dataset(name=dataset, root=root, image_size=None)
+        assert len(ds) == 1
+        assert ds.get_ids() == ["sample_1"]

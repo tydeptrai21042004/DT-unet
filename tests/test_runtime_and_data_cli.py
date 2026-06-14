@@ -33,7 +33,8 @@ def test_normalize_dataset_name_accepts_aliases():
     assert normalize_dataset_name("clinicdb") == "cvc_clinicdb"
     assert normalize_dataset_name("etis-laribpolypdb") == "etis"
     assert normalize_dataset_name("cvc300") == "cvc_300"
-    assert normalize_dataset_name("custom") == "custom"
+    assert normalize_dataset_name("instrument") == "kvasir_instrument"
+    assert normalize_dataset_name("montgomery") == "montgomery_lung"
 
 
 def test_kvasir_dataset_spec_has_default_download_url():
