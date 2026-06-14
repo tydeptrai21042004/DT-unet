@@ -24,6 +24,8 @@ OUTPUT_ROOT="${OUTPUT_ROOT:-outputs_hc_session_${SESSION}}"
 INSTALL_DEPS="${INSTALL_DEPS:-1}"
 RUN_TESTS="${RUN_TESTS:-1}"
 ALLOW_INSECURE_DOWNLOAD="${ALLOW_INSECURE_DOWNLOAD:-1}"
+BUSI_ZIP_PATH="${BUSI_ZIP_PATH:-}"
+AUTO_FIND_KAGGLE_INPUT="${AUTO_FIND_KAGGLE_INPUT:-1}"
 
 HC_MODEL="proposal_hc_unet_no_gate"
 NEW_DATASET=""
@@ -78,17 +80,76 @@ fi
 rm -rf "$OUTPUT_ROOT"
 mkdir -p "$OUTPUT_ROOT"
 
+find_busi_zip() {
+  local candidate=""
+
+  if [[ -n "$BUSI_ZIP_PATH" ]]; then
+    printf '%s\n' "$BUSI_ZIP_PATH"
+    return 0
+  fi
+
+  if [[ "$AUTO_FIND_KAGGLE_INPUT" == "1" && -d /kaggle/input ]]; then
+    candidate="$(find /kaggle/input -type f \
+      \( -iname 'Dataset_BUSI.zip' -o -iname '*BUSI*.zip' \) \
+      -print -quit 2>/dev/null || true)"
+  fi
+
+  printf '%s\n' "$candidate"
+}
+
+validate_zip_archive() {
+  local archive_path="$1"
+
+  [[ -f "$archive_path" ]] || {
+    echo "ERROR: Dataset archive does not exist: $archive_path" >&2
+    return 1
+  }
+
+  "$PYTHON_BIN" - "$archive_path" <<'PY_VALIDATE_ZIP'
+import sys
+import zipfile
+from pathlib import Path
+
+archive = Path(sys.argv[1])
+if not zipfile.is_zipfile(archive):
+    raise SystemExit(f"ERROR: Not a valid ZIP archive: {archive}")
+print(f"Validated dataset archive: {archive} ({archive.stat().st_size} bytes)")
+PY_VALIDATE_ZIP
+}
+
 prepare_dataset() {
   local dataset_name="$1"
+  local archive_path=""
+  local prepare_args=(
+    --dataset "$dataset_name"
+    --data-root "$DATA_ROOT"
+    --image-size "$IMAGE_SIZE"
+    --force
+  )
+
   echo "============================================================"
-  echo "Prepare ${dataset_name} (automatic registry download)"
+  echo "Prepare ${dataset_name}"
   echo "============================================================"
 
-  "$PYTHON_BIN" scripts/prepare_dataset.py \
-    --dataset "$dataset_name" \
-    --data-root "$DATA_ROOT" \
-    --image-size "$IMAGE_SIZE" \
-    --force
+  if [[ "$dataset_name" == "busi" ]]; then
+    archive_path="$(find_busi_zip)"
+    if [[ -n "$archive_path" ]]; then
+      validate_zip_archive "$archive_path"
+      echo "Using supplied official BUSI archive: $archive_path"
+      prepare_args+=(--zip-path "$archive_path")
+    else
+      echo "No local BUSI archive found; trying the registry official URL."
+      echo "If the official server returns HTTP 403, upload Dataset_BUSI.zip"
+      echo "as a Kaggle input or set BUSI_ZIP_PATH=/path/to/Dataset_BUSI.zip."
+      if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
+        prepare_args+=(--allow-insecure-download)
+      fi
+    fi
+  elif [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
+    prepare_args+=(--allow-insecure-download)
+  fi
+
+  "$PYTHON_BIN" scripts/prepare_dataset.py "${prepare_args[@]}"
 
   "$PYTHON_BIN" scripts/make_splits.py \
     --dataset "$dataset_name" \
@@ -168,7 +229,8 @@ run_multi_seed \
   echo "epochs=$EPOCHS"
   echo "seeds=$SEEDS"
   echo "device=$DEVICE"
-  echo "dataset_download_source=official_registry_archives"
+  echo "dataset_download_source=official_archive_or_registry"
+  echo "busi_zip_path=${BUSI_ZIP_PATH:-auto}"
 } > "$OUTPUT_ROOT/session_manifest.txt"
 
 find "$OUTPUT_ROOT" -type f \
