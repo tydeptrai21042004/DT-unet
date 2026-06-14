@@ -14,9 +14,9 @@ SUPPORTED_BINARY_SEG_DATASETS = {
     "cvc_colondb",
     "cvc_300",
     "isic2018",
-    "busi",
-    "drive",
-    "custom",
+    "kvasir_instrument",
+    "hyper_kvasir_seg",
+    "montgomery_lung",
 }
 
 

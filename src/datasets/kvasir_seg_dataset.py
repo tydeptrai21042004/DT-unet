@@ -36,9 +36,9 @@ COMMON_DATASET_DIR_ALIASES: Dict[str, Tuple[str, ...]] = {
         "ISIC2018_Task1-2_Training_Input",
         "ISIC2018_Task1_Training_GroundTruth",
     ),
-    "busi": ("BUSI", "Breast Ultrasound Images Dataset", "Dataset_BUSI_with_GT", "breast-ultrasound-images-dataset"),
-    "drive": ("DRIVE", "Digital Retinal Images for Vessel Extraction", "DRIVE-DB"),
-    "custom": tuple(),
+    "kvasir_instrument": ("Kvasir-Instrument", "kvasir-instrument", "kvasir_instrument"),
+    "hyper_kvasir_seg": ("HyperKvasir-SEG", "hyper-kvasir-segmented-images", "segmented-images", "segmented_images"),
+    "montgomery_lung": ("Montgomery-Lung", "MontgomerySet", "Montgomery-County-CXR-Set"),
 }
 
 
@@ -60,6 +60,7 @@ IMAGE_DIR_NAMES = {
     "isic2018_task1-2_training_input",
     "isic2018_task1_validation_input",
     "isic2018_task1_test_input",
+    "cxr_png",
 }
 MASK_DIR_NAMES = {
     "mask",
@@ -85,6 +86,9 @@ MASK_DIR_NAMES = {
     "isic2018_task1_training_groundtruth",
     "isic2018_task1_validation_groundtruth",
     "isic2018_task1_test_groundtruth",
+    "manualmask",
+    "leftmask",
+    "rightmask",
 }
 
 
@@ -100,9 +104,7 @@ def canonical_sample_id(value: str | Path) -> str:
     """Return a robust pairing key for common binary-segmentation datasets.
 
     Kvasir/CVC masks usually share the exact image stem. Cross-domain datasets
-    often add suffixes: ISIC uses ``_segmentation``, BUSI uses ``_mask`` or
-    ``_mask_1``, and DRIVE uses ``_manual1``. Removing these suffixes allows one
-    generic image/mask loader to support all of those layouts.
+    often add suffixes such as ISIC ``_segmentation``. Removing common annotation suffixes allows one generic image/mask loader to support those layouts.
     """
     stem = Path(value).stem.lower().strip()
     stem = stem.replace(" ", "_")
@@ -214,7 +216,7 @@ def _resolve_image_mask_dirs(path: Path) -> Optional[KvasirPaths]:
     """Return compatible image/mask directories under ``path``.
 
     Public segmentation archives are inconsistent. This resolver accepts common
-    Kvasir/PraNet, ISIC, BUSI, and DRIVE directory names without changing the
+    Kvasir/PraNet, ISIC, Kvasir-Instrument, HyperKvasir, and Montgomery directory names without changing the
     dataset API.
     """
     if not path.is_dir():
@@ -290,8 +292,6 @@ def _find_dataset_root(root: Path, dataset_name: str) -> Optional[Path]:
     for candidate in root.rglob("*"):
         if not candidate.is_dir() or not _has_image_mask_dirs(candidate):
             continue
-        if normalized == "custom":
-            return candidate
         path_text = candidate.as_posix().lower()
         if any(keyword in path_text for keyword in keywords):
             return candidate

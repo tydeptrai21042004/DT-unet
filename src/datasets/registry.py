@@ -68,30 +68,29 @@ DATASET_SPECS = {
         official_source_url="https://challenge.isic-archive.com/data/",
         description="ISIC 2018 Task 1 binary skin-lesion boundary segmentation dataset. Automatically downloaded from the official ISIC Challenge archive.",
     ),
-    "busi": DatasetSpec(
-        name="busi",
-        aliases=("busi", "dataset_busi", "dataset_busi_with_gt", "breast_ultrasound", "breast-ultrasound", "breast_ultrasound_images_dataset"),
-        canonical_dir="Dataset_BUSI_with_GT",
-        default_download_url=None,
-        official_download_urls=(
-            "https://scholar.cu.edu.eg/Dataset_BUSI.zip",
-        ),
-        official_source_url="https://scholar.cu.edu.eg/?q=afahmy/pages/dataset",
-        description="BUSI breast ultrasound lesion segmentation dataset. Automatically downloaded from the official Cairo University dataset page; the generic loader pairs *_mask files with corresponding images.",
+    "kvasir_instrument": DatasetSpec(
+        name="kvasir_instrument",
+        aliases=("kvasir_instrument", "kvasir-instrument", "instrument", "kvasir_tool"),
+        canonical_dir="Kvasir-Instrument",
+        default_download_url="https://datasets.simula.no/downloads/kvasir-instrument.zip",
+        official_source_url="https://datasets.simula.no/kvasir-instrument/",
+        description="Kvasir-Instrument gastrointestinal endoscopic tool binary segmentation dataset.",
     ),
-    "drive": DatasetSpec(
-        name="drive",
-        aliases=("drive", "drive_db", "drive-db", "digital_retinal_images_for_vessel_extraction", "retinal_drive"),
-        canonical_dir="DRIVE",
-        default_download_url=None,
-        description="DRIVE retinal vessel segmentation dataset. The generic loader pairs *_manual masks with corresponding fundus images.",
+    "hyper_kvasir_seg": DatasetSpec(
+        name="hyper_kvasir_seg",
+        aliases=("hyper_kvasir_seg", "hyper-kvasir-seg", "hyper_kvasir_segmentation", "hyper-kvasir-segmentation"),
+        canonical_dir="HyperKvasir-SEG",
+        default_download_url="https://datasets.simula.no/downloads/hyper-kvasir/hyper-kvasir-segmented-images.zip",
+        official_source_url="https://datasets.simula.no/hyper-kvasir/",
+        description="The segmentation-only HyperKvasir subset; the full 58.6 GB archive is intentionally not downloaded.",
     ),
-    "custom": DatasetSpec(
-        name="custom",
-        aliases=("custom", "custom_binary_seg", "custom_segmentation"),
-        canonical_dir="custom",
+    "montgomery_lung": DatasetSpec(
+        name="montgomery_lung",
+        aliases=("montgomery_lung", "montgomery-lung", "montgomery", "montgomery_cxr", "montgomery-cxr"),
+        canonical_dir="Montgomery-Lung",
         default_download_url=None,
-        description="Custom binary segmentation dataset with matching images/masks and split files.",
+        official_source_url="https://data.lhncbc.nlm.nih.gov/public/Tuberculosis-Chest-X-ray-Datasets/Montgomery-County-CXR-Set/MontgomerySet/",
+        description="NLM Montgomery County chest X-ray lung-field segmentation dataset; left and right masks are merged automatically.",
     ),
 }
 
