@@ -11,7 +11,6 @@ SOURCE_DIR="${SOURCE_DIR:-}"
 ZIP_PATH="${ZIP_PATH:-}"
 DOWNLOAD_URL="${DOWNLOAD_URL:-}"
 DOWNLOAD_DST="${DOWNLOAD_DST:-}"
-KAGGLE_HANDLE="${KAGGLE_HANDLE:-}"
 IMAGE_SIZE="${IMAGE_SIZE:-352}"
 BATCH_SIZE="${BATCH_SIZE:-6}"
 EPOCHS="${EPOCHS:-30}"
@@ -47,9 +46,6 @@ if [[ -n "$DOWNLOAD_URL" ]]; then
 fi
 if [[ -n "$DOWNLOAD_DST" ]]; then
   cmd+=(--download-dst "$DOWNLOAD_DST")
-fi
-if [[ -n "$KAGGLE_HANDLE" ]]; then
-  cmd+=(--kaggle-handle "$KAGGLE_HANDLE")
 fi
 if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
   cmd+=(--allow-insecure-download)

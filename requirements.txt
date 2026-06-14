@@ -11,5 +11,3 @@ requests>=2.31.0
 
 gdown>=5.2.0
 
-# Public Kaggle dataset download (ISIC 2018 / BUSI)
-kagglehub>=0.3.0

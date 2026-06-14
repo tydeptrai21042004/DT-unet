@@ -7,7 +7,6 @@ cd "$PROJECT_ROOT"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 CONFIG_DIR="${CONFIG_DIR:-configs}"
 ALLOW_INSECURE_DOWNLOAD="${ALLOW_INSECURE_DOWNLOAD:-0}"
-KAGGLE_HANDLE="${KAGGLE_HANDLE:-}"
 DATASET="${DATASET:-kvasir_seg}"
 DATA_ROOT="${DATA_ROOT:-data}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-outputs}"
@@ -49,7 +48,6 @@ Environment overrides:
   MODELS       Comma-separated model list for train-all/eval-all/benchmark
   SEEDS        Comma-separated seeds for benchmark-seeds/aggregate-seeds (default: 42,1337,2024)
   ALLOW_INSECURE_DOWNLOAD  Set to 1 to bypass TLS verification for dataset download when needed
-  KAGGLE_HANDLE Optional Kaggle dataset handle override (owner/dataset)
 EOF2
 }
 
@@ -62,9 +60,6 @@ cmd_prepare() {
   local extra=()
   if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
     extra+=(--allow-insecure-download)
-  fi
-  if [[ -n "$KAGGLE_HANDLE" ]]; then
-    extra+=(--kaggle-handle "$KAGGLE_HANDLE")
   fi
   "$PYTHON_BIN" scripts/prepare_dataset.py \
     --dataset "$DATASET" \
@@ -136,9 +131,6 @@ cmd_benchmark() {
   if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
     extra+=(--allow-insecure-download)
   fi
-  if [[ -n "$KAGGLE_HANDLE" ]]; then
-    extra+=(--kaggle-handle "$KAGGLE_HANDLE")
-  fi
   "$PYTHON_BIN" scripts/benchmark_all.py \
     --models "$MODELS" \
     --dataset "$DATASET" \
@@ -167,9 +159,6 @@ cmd_benchmark_seeds() {
   local extra=()
   if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
     extra+=(--allow-insecure-download)
-  fi
-  if [[ -n "$KAGGLE_HANDLE" ]]; then
-    extra+=(--kaggle-handle "$KAGGLE_HANDLE")
   fi
   "$PYTHON_BIN" scripts/benchmark_multi_seed.py \
     --models "$MODELS" \
@@ -213,9 +202,6 @@ cmd_hc_ablation() {
   local extra=()
   if [[ "$ALLOW_INSECURE_DOWNLOAD" == "1" ]]; then
     extra+=(--allow-insecure-download)
-  fi
-  if [[ -n "$KAGGLE_HANDLE" ]]; then
-    extra+=(--kaggle-handle "$KAGGLE_HANDLE")
   fi
   "$PYTHON_BIN" scripts/run_hc_ablation.py \
     --dataset "$DATASET" \

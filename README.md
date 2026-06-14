@@ -99,14 +99,14 @@ Prepare and split examples:
 DATASET=kvasir_seg bash run.sh prepare
 DATASET=kvasir_seg bash run.sh splits
 
-# Automatic KaggleHub download for cross-domain datasets
+# Automatic official-source download for cross-domain datasets
 python scripts/prepare_dataset.py --dataset isic2018 --data-root data --image-size 352
 python scripts/make_splits.py --dataset isic2018 --data-root data --image-size 352
 
 python scripts/prepare_dataset.py --dataset busi --data-root data --image-size 352
 python scripts/make_splits.py --dataset busi --data-root data --image-size 352
 
-# Local source directories remain supported and override automatic download.
+# Local source directories remain supported and override automatic official-source download.
 python scripts/prepare_dataset.py --dataset isic2018 --source-dir /path/to/ISIC2018 --data-root data --image-size 352
 python scripts/prepare_dataset.py --dataset busi --source-dir /path/to/Dataset_BUSI_with_GT --data-root data --image-size 352
 
@@ -216,7 +216,7 @@ OUTPUT_ROOT=outputs_hc_ablation_kvasir \
   bash run.sh hc-ablation --batch-size 6 --epochs 30 --num-workers 2
 ```
 
-### Run on ISIC 2018 with automatic download
+### Run on ISIC 2018 with automatic official-source download
 
 ```bash
 DATASET=isic2018 \
@@ -226,7 +226,7 @@ OUTPUT_ROOT=outputs_hc_ablation_isic2018 \
   bash run_hc_ablation.sh
 ```
 
-### Run on BUSI with automatic download
+### Run on BUSI with automatic official-source download
 
 ```bash
 DATASET=busi \
@@ -248,8 +248,7 @@ be trained individually with `scripts/train_one.py`.
 ## Four balanced independent Kaggle sessions
 
 The repository includes four permanent session runners. Each session performs
-24 model-seed runs and automatically downloads only the cross-domain dataset it
-needs:
+24 model-seed runs and automatically downloads only the required cross-domain dataset from its official source:
 
 | Session | Automatic dataset | Work allocation |
 |---|---|---|
@@ -274,8 +273,9 @@ INSTALL_DEPS=0 RUN_TESTS=0 EPOCHS=30 BATCH_SIZE=6 DEVICE=cuda \
   bash run_hc_session_1.sh
 ```
 
-ISIC 2018 uses the registry handle
-`tschandl/isic2018-challenge-task1-data-segmentation`; BUSI uses
-`sabahesaraki/breast-ultrasound-images-dataset`. A local `--source-dir`, zip,
-direct URL, or `KAGGLE_HANDLE=owner/dataset` override remains available.
+ISIC 2018 is downloaded from the official ISIC Challenge archives:
+`ISIC2018_Task1-2_Training_Input.zip` and
+`ISIC2018_Task1_Training_GroundTruth.zip`. BUSI is downloaded from the
+official Cairo University archive `https://scholar.cu.edu.eg/Dataset_BUSI.zip`.
+A local `--source-dir`, zip, or explicit direct URL override remains available.
 

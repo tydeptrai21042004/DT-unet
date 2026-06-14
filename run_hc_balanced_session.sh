@@ -133,7 +133,7 @@ run_multi_seed() {
 }
 
 # Each session prepares only its required cross-domain dataset. ISIC 2018 and
-# BUSI are downloaded automatically through the DatasetSpec KaggleHub handles.
+# BUSI are downloaded automatically from registry-configured official archives.
 prepare_dataset "$NEW_DATASET"
 
 run_multi_seed \
@@ -168,6 +168,7 @@ run_multi_seed \
   echo "epochs=$EPOCHS"
   echo "seeds=$SEEDS"
   echo "device=$DEVICE"
+  echo "dataset_download_source=official_registry_archives"
 } > "$OUTPUT_ROOT/session_manifest.txt"
 
 find "$OUTPUT_ROOT" -type f \
